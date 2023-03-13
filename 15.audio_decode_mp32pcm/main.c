@@ -11,7 +11,7 @@
 
 int main()
 {
-    const char inFileName[] = "/home/jackey/Music/test.mp3";
+    const char inFileName[] = "http://jnkh.vicp.net:4000/rtp/239.93.0.184:5140";
     const char outFileName[] = "test.pcm";
     FILE *file=fopen(outFileName,"w+b");
     if(!file){

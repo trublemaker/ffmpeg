@@ -7,8 +7,8 @@ CONFIG -= qt
 
 # windows平台
 win32{
-INCLUDEPATH += C:\\ffmpeg\\include
-LIBS += -LC:/ffmpeg/lib \
+INCLUDEPATH += C:\Qt\ffmpeg-5.1.2\include
+LIBS += -LC:\Qt\ffmpeg-5.1.2/lib \
         -lavcodec \
         -lavdevice \
         -lavformat \
