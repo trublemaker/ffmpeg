@@ -1,3 +1,5 @@
+QT += core multimedia testlib
+
 TEMPLATE = app
 CONFIG += console
 CONFIG -= app_bundle
@@ -7,8 +9,8 @@ CONFIG -= qt
 
 # windows平台
 win32{
-INCLUDEPATH += C:\\ffmpeg\\include
-LIBS += -LC:/ffmpeg/lib \
+INCLUDEPATH += C:\Qt\ffmpeg-6.0\include
+LIBS += -LC:\Qt\ffmpeg-6.0/lib \
         -lavcodec \
         -lavdevice \
         -lavformat \

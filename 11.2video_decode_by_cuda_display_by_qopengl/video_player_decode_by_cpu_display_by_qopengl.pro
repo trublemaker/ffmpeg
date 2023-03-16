@@ -12,15 +12,17 @@ CONFIG += c++11
 
 # windows平台
 win32{
-INCLUDEPATH += C:\Qt\ffmpeg-5.1.2\include
-LIBS += -LC:\Qt\ffmpeg-5.1.2\lib \
+INCLUDEPATH += C:\Qt\ffmpeg-6.0\include
+LIBS += -LC:\Qt\ffmpeg-6.0\lib \
+        -L"C:\Program Files (x86)\Windows Kits\10\Lib\10.0.19041.0\um\x64" \
         -lavcodec \
         -lavdevice \
         -lavformat \
         -lavutil   \
         -lpostproc \
         -lswresample \
-        -lswscale
+        -lswscale \
+        -lWinmm
 }
 
 # linux平台

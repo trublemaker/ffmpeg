@@ -33,7 +33,7 @@
     <item row="0" column="0">
      <widget class="QLineEdit" name="lineUrl">
       <property name="text">
-       <string>http://jnkh.vicp.net:4000/rtp/239.93.0.184:5140</string>
+       <string>http://192.168.1.26:7088/rtp/239.93.0.66:5140</string>
       </property>
      </widget>
     </item>

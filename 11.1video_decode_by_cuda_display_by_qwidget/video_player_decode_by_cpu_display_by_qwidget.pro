@@ -12,15 +12,17 @@ CONFIG += c++11
 
 # windows平台
 win32{
-INCLUDEPATH += C:\Qt\ffmpeg-5.1.2\include
+INCLUDEPATH += C:\Qt\ffmpeg-5.1.2\include  C:\Dev\SDL2-2.26.4\include
 LIBS += -LC:\Qt\ffmpeg-5.1.2/lib \
+        -L"C:\Program Files (x86)\Windows Kits\10\Lib\10.0.19041.0\um\x64" \
+        -LC:\Dev\SDL2-2.26.4\lib\x64 \
         -lavcodec \
         -lavdevice \
         -lavformat \
         -lavutil   \
         -lpostproc \
         -lswresample \
-        -lswscale
+        -lswscale -lWinmm -lSDL2
 }
 
 # linux平台

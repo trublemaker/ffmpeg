@@ -24,8 +24,8 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 # windows平台
 win32{
-INCLUDEPATH += C:\Qt\ffmpeg-5.1.2\include
-LIBS += -LC:\Qt\ffmpeg-5.1.2/lib \
+INCLUDEPATH += C:\Qt\ffmpeg-6.0\include
+LIBS += -LC:\Qt\ffmpeg-6.0/lib \
         -lavcodec \
         -lavdevice \
         -lavformat \
