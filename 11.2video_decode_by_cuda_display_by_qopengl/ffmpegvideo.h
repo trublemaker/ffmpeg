@@ -7,7 +7,7 @@
 #include <QThread>
 #include <QPainter>
 #include <QDebug>
-
+#include <QDateTime>
 #include <string>
 
 extern "C"{
@@ -29,6 +29,11 @@ extern "C"{
 }
 
 using namespace std;
+
+struct IMG{
+    QImage  *img;
+    int64_t pts;
+};
 
 class FFmpegVideo : public QThread
 {
@@ -69,6 +74,38 @@ private:
 
     QString _filePath;
 
+    QDateTime _time;
+
+    int videoStreamIndex =-1;
+    int numBytes = -1;
+
+    int ret =0;
+
+    bool initFlag=false,openFlag=false,stopFlag=false;
+};
+
+class PlayVideo : public QThread
+{
+    Q_OBJECT
+public:
+    explicit PlayVideo(){};
+    ~PlayVideo(){};
+
+    void stopThread(){};
+
+protected:
+    void run();
+
+signals:
+    void sendQImage(const IMG &img);
+
+private:
+
+    uchar *out_buffer;
+    struct SwsContext *img_ctx=NULL;
+
+    QString _filePath;
+
     int videoStreamIndex =-1;
     int numBytes = -1;
 
@@ -92,10 +129,11 @@ protected:
     void paintEvent(QPaintEvent *);
 
 private slots:
-    void receiveQImage(const QImage &rImg);
+    void receiveQImage(const IMG &rImg);
 
 private:
     FFmpegVideo *ffmpeg;
+    PlayVideo   *playf;
 
     QImage img;
 };

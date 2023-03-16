@@ -26,7 +26,8 @@ extern "C"{
 
 int main()
 {
-    QString _url="http://jnkh.vicp.net:4000/rtp/239.93.0.184:5140";
+    QString _url1="http://jnkh.vicp.net:4000/rtp/239.93.0.184:5140";
+    QString _url="http://192.168.1.26:7088/rtp/239.93.0.97:5140";
 
     QAudioOutput *audioOutput;
     QIODevice *streamOut;

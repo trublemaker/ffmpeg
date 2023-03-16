@@ -1,5 +1,18 @@
 #include "ffmpegvideo.h"
 
+//#include <sys/time.h>
+#include <time.h>
+#include <QDebug>
+#include <QTime>
+#include <qdatetime.h>
+
+#include <Windows.h>
+#include <list>
+
+int NSSleep(int msec);
+
+list<IMG> Images;
+
 typedef struct DecodeContext{
     AVBufferRef *hw_device_ref;
 }DecodeContext;
@@ -53,7 +66,8 @@ int FFmpegVideo::open_input_file()
     enum AVHWDeviceType type;
     int i;
 
-    type = av_hwdevice_find_type_by_name("cuda");
+    /* cuda dxva2 qsv d3d11va */
+    type = av_hwdevice_find_type_by_name("cuda");//cuda
     if (type == AV_HWDEVICE_TYPE_NONE) {
         fprintf(stderr, "Device type %s is not supported.\n", "h264_cuvid");
         fprintf(stderr, "Available device types:");
@@ -171,9 +185,43 @@ void FFmpegVideo::stopThread()
 
 void FFmpegVideo::run()
 {
+    int64_t start_time = ::GetTickCount64();
+
+    double PCFreq = 0.0;
+    LARGE_INTEGER freq;
+
+    LARGE_INTEGER li;
+    if(!QueryPerformanceFrequency(&li)){
+        qDebug() <<"QueryPerformanceFrequency failed!";
+    }
+
+    PCFreq = double(li.QuadPart)/1000.0;
+
+    QueryPerformanceCounter(&li);
+    int64_t CounterStart = li.QuadPart;
+
+    int64_t lipre=CounterStart;
+    MMRESULT r = timeBeginPeriod(1);
+    for(int i=0;i<10;i++){
+
+        //Sleep(5);
+        NSSleep(5);
+        QueryPerformanceCounter(&li);
+        double deltax = double(li.QuadPart-lipre)/PCFreq;
+        lipre=li.QuadPart;
+        qDebug()<< "sleep 5ms " <<QDateTime::currentDateTime().toString("hh:mm:ss.zzz")<<deltax;
+    }
+    timeEndPeriod(1);
+
+    //__asm int 3;
+
     if(!openFlag){
         open_input_file();
     }
+
+    TIMERR_NOERROR;
+    //MMRESULT rx = timeBeginPeriod(1);
+    ::Sleep(0);
 
     while(av_read_frame(fmtCtx,pkt)>=0){
         if(stopFlag) break;
@@ -201,25 +249,184 @@ void FFmpegVideo::run()
                               nv12Frame->height,
                               rgbFrame->data,rgbFrame->linesize);
 
+                    AVRational time_base = videoCodecCtx->time_base;
+                    AVRational time_base_q = {1,AV_TIME_BASE};
+
+                    int64_t pts_time = av_rescale_q(yuvFrame->pkt_dts,time_base,time_base_q);
+                    int64_t now_time = ::GetTickCount64()-start_time;
+
+                    double xy = yuvFrame->pts* av_q2d(time_base);
+                    double duration = pkt->duration* av_q2d(time_base);
+                    static int64_t pts_time_pre=0;
+                    //qDebug("%f  %f",xy, duration);//
+                    //qDebug()<< pts_time << pts_time - pts_time_pre<< now_time<< pkt->duration ;
+
+                    pts_time_pre=pts_time;
+                    start_time = ::GetTickCount64();
+                    //time_base_q = av_get_time_base_q();
+
+                    //struct timeval tv;
+                    //gettimeofday(&tv,NULL);
+                    //int64_t now_time =  (int64_t)tv.tv_sec * 1000000 + tv.tv_usec;
+
+                    //double x = av_q2d(yuvFrame->time_base);
+                    //double y = yuvFrame->pts*x;
+
+                    static int64_t pts = 0 ;
+                    int64_t delta=3600;
+
+                    QueryPerformanceCounter(&li);
+                    int64_t t1 = li.QuadPart;
+                    static int64_t t1_pre=0;
+
+                    int delta1=0;
+                    double deltax=0;
+                    if(t1_pre){
+                        deltax = double(t1-t1_pre)/PCFreq;
+                        delta1 = 40 -deltax;
+                        //qDebug()<< "1" <<QDateTime::currentDateTime().toString("hh:mm:ss.zzz")<< deltax << delta1;
+                        if(delta1>0){
+                            //::Sleep(delta1);
+                            //qDebug()<< "-" <<QDateTime::currentDateTime().toString("hh:mm:ss.zzz")<< deltax << delta1;
+                        }
+
+                    }
+
+                    //MMRESULT r = timeBeginPeriod(1);
+                    //::Sleep(10);
+                    //timeEndPeriod(1);
+
+                    //static LARGE_INTEGER lt1;
+                    //QueryPerformanceCounter(&li);
+                    //deltax = double(li.QuadPart-lt1.QuadPart)/PCFreq;
+                    //qDebug()<< "2" <<QDateTime::currentDateTime().toString("hh:mm:ss.zzz") << deltax << delta1  ;
+
+                    QueryPerformanceCounter(&li);
+                    deltax = double(li.QuadPart-CounterStart)/PCFreq;
+                    //qDebug()<< "D" <<QDateTime::currentDateTime().toString("hh:mm:ss.zzz") << deltax << delta1  ;
+
+                    QImage *pimg = new QImage(out_buffer,
+                                              videoCodecCtx->width,videoCodecCtx->height,
+                                              QImage::Format_RGB32);
+
+                    IMG img;img.img=pimg;img.pts=yuvFrame->pts;
+                    Images.push_back(img);
+
+                    /*
                     QImage img(out_buffer,
                                videoCodecCtx->width,videoCodecCtx->height,
                                QImage::Format_RGB32);
-                    emit sendQImage(img);
+                    */
+                    //emit sendQImage(img);
 
-                    QThread::msleep(30);
+                    //QueryPerformanceCounter(&lt1);
+                    t1_pre = t1;
+
+                    if(pts){
+                        delta = yuvFrame->pts-pts;
+                    }
+                    pts = yuvFrame->pts;
+                    //qDebug()<< "2" << QDateTime::currentDateTime().toString("mm:ss.zzz")<< yuvFrame->pts << delta;
+                    QThread::msleep(0);
+                    //qDebug()<< "3" << QDateTime::currentDateTime().toString("mm:ss.zzz")<< yuvFrame->pts << delta;
                 }
             }
             av_packet_unref(pkt);
         }
     }
+
+    //timeEndPeriod(1);
+
     qDebug()<<"Thread stop now";
+}
+
+void PlayVideo::run()
+{
+    double PCFreq = 0.0;
+    LARGE_INTEGER freq;
+
+    LARGE_INTEGER li;
+    if(!QueryPerformanceFrequency(&li)){
+        qDebug() <<"QueryPerformanceFrequency failed!";
+    }
+
+    PCFreq = double(li.QuadPart)/1000.0;
+
+    QueryPerformanceCounter(&li);
+    int64_t CounterStart = li.QuadPart;
+
+    int64_t lipre=CounterStart;
+
+    MMRESULT rx = timeBeginPeriod(1);
+    ::Sleep(0);
+
+    int64_t pts_pre=0;
+    bool disp=0;
+    int sleeptime=37;
+
+    if(rx != TIMERR_NOERROR){
+        qDebug() <<"timeBeginPeriod failed!";
+        sleeptime=390;
+    }
+
+    while(1){
+        if(stopFlag) break;
+
+        if(Images.size()>0){
+            IMG img = Images.front();
+            Images.pop_front();
+
+            if(!disp)
+            {
+                QueryPerformanceCounter(&li);
+                //(li.QuadPart-lipre)/PCFreq;
+
+                QThread::yieldCurrentThread();
+                emit sendQImage(img);//
+
+                //qDebug()<< "S" <<QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*")<<img.pts-pts_pre<<(li.QuadPart-lipre)/PCFreq<<Images.size();
+                //QThread::yieldCurrentThread();
+                //disp=1;
+                lipre= li.QuadPart;
+            }
+
+            if(Images.size()>6){
+                //qDebug()<< "S" <<QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*")<<img.pts-pts_pre<<Images.size();
+                sleeptime--;
+                if(sleeptime<=25)sleeptime=25;
+            }else
+            {
+                sleeptime++;
+                if(sleeptime>=37)sleeptime=37;
+            }
+
+            pts_pre=img.pts;
+            //delete img.img;
+        }
+        else{
+
+        }
+
+        //NSSleep(sleeptime);
+        //QThread::usleep(sleeptime*1000);
+        QThread::msleep(sleeptime);
+
+    }
+
+    rx = timeEndPeriod(1);
+
+    qDebug()<<"PlayVideo Thread end now";
 }
 
 FFmpegWidget::FFmpegWidget(QWidget *parent) : QWidget(parent)
 {
     ffmpeg = new FFmpegVideo;
-    connect(ffmpeg,SIGNAL(sendQImage(QImage)),this,SLOT(receiveQImage(QImage)));
+    playf  = new PlayVideo;
+
+    //connect(ffmpeg,SIGNAL(snedQImage(IMG)),this,SLOT(receiveQImage(IMG)),Qt::DirectConnection);
     connect(ffmpeg,&FFmpegVideo::finished,ffmpeg,&FFmpegVideo::deleteLater);
+    connect(playf, SIGNAL(sendQImage(IMG)),this,SLOT(receiveQImage(IMG)),Qt::DirectConnection);
+    //connect(playf, &PlayVideo::finished,playf, &PlayVideo::deleteLater);
 }
 
 FFmpegWidget::~FFmpegWidget()
@@ -232,8 +439,11 @@ FFmpegWidget::~FFmpegWidget()
 
 void FFmpegWidget::play(QString url)
 {
+    playf->start();
+
     ffmpeg->setPath(url);
     ffmpeg->start();
+
 }
 
 void FFmpegWidget::stop()
@@ -252,8 +462,26 @@ void FFmpegWidget::paintEvent(QPaintEvent *)
     painter.drawImage(0,0,img);
 }
 
-void FFmpegWidget::receiveQImage(const QImage &rImg)
+void FFmpegWidget::receiveQImage(const IMG &rImg)
 {
-    img = rImg.scaled(this->size());
+    QDateTime startDT = QDateTime::currentDateTime();
+    static QDateTime preDT = QDateTime::currentDateTime();
+
+    int delta = (startDT.time().msec()-preDT.time().msec());
+    if(delta<0) delta+=1000;
+
+    //delta-=40;
+
+    static int64_t pts_pre=0;
+    //QThread::yieldCurrentThread();
+
+    //img = rImg.img->scaled(nw,nh);//KeepAspectRatioByExpanding  KeepAspectRatio SmoothTransformation FastTransformation
+
+    img = rImg.img->scaled(this->size(),Qt::KeepAspectRatio,Qt::SmoothTransformation);
+    qDebug()<< "R" <<startDT.toString("-hh:mm:ss.zzz-")<< QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*") << delta << rImg.pts-pts_pre<<rImg.pts;
+    pts_pre=rImg.pts; preDT = startDT;
+    delete rImg.img;
+
     update();
+    QThread::yieldCurrentThread();
 }

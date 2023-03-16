@@ -1,11 +1,14 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include <SDL.h>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
+    SDL_Init(SDL_INIT_EVERYTHING);
     ui->setupUi(this);
+
 }
 
 MainWindow::~MainWindow()

@@ -1,5 +1,18 @@
 #include "ffmpegvideo.h"
 
+#include <QDateTime>
+
+#include <Windows.h>
+#include <SDL.h>
+
+list<IMG> Images;
+
+SDL_Window  * _window;
+SDL_Surface * _pScreens ;
+SDL_Surface *_pload ;
+SDL_Renderer*pSDLRenderer;
+SDL_Texture *texture;
+
 typedef struct DecodeContext{
     AVBufferRef *hw_device_ref;
 }DecodeContext;
@@ -10,7 +23,9 @@ static enum AVPixelFormat hw_pix_fmt;
 static AVBufferRef* hw_device_ctx=NULL;
 
 FFmpegVideo::FFmpegVideo()
-{}
+{
+    int i=0;
+}
 
 FFmpegVideo::~FFmpegVideo()
 {}
@@ -53,7 +68,11 @@ int FFmpegVideo::open_input_file()
     enum AVHWDeviceType type;
     int i;
 
+    /*
+     * cuda dxva2 qsv d3d11va
+     */
     type = av_hwdevice_find_type_by_name("cuda");
+
     if (type == AV_HWDEVICE_TYPE_NONE) {
         fprintf(stderr, "Device type %s is not supported.\n", "h264_cuvid");
         fprintf(stderr, "Available device types:");
@@ -115,7 +134,7 @@ int FFmpegVideo::open_input_file()
 
     img_ctx = sws_getContext(videoCodecCtx->width,
                              videoCodecCtx->height,
-                             AV_PIX_FMT_NV12,
+                             AV_PIX_FMT_NV12 ,//  AV_PIX_FMT_NV12, AV_PIX_FMT_YUV420P
                              videoCodecCtx->width,
                              videoCodecCtx->height,
                              AV_PIX_FMT_RGB32,
@@ -176,6 +195,10 @@ void FFmpegVideo::run()
         open_input_file();
     }
 
+    texture = SDL_CreateTexture(pSDLRenderer, SDL_PIXELFORMAT_IYUV,
+                                SDL_TEXTUREACCESS_STREAMING,
+                                1920, 1080);
+
     while(av_read_frame(fmtCtx,pkt)>=0){
         if(stopFlag) break;
         if(pkt->stream_index == videoStreamIndex){
@@ -195,19 +218,63 @@ void FFmpegVideo::run()
                         }
                     }
 
+                    if(1){
+                        SDL_UpdateYUVTexture(texture, NULL, nv12Frame->data[0],
+                                nv12Frame->linesize[0], nv12Frame->data[1], nv12Frame->linesize[1],
+                                nv12Frame->data[2], nv12Frame->linesize[2]);
+                        SDL_RenderClear(pSDLRenderer);
+                        SDL_RenderCopy(pSDLRenderer, texture, NULL, NULL);
+                        SDL_RenderPresent(pSDLRenderer);
+                    }
+
                     sws_scale(img_ctx,
                               (const uint8_t* const*)nv12Frame->data,
                               (const int*)nv12Frame->linesize,
                               0,
                               nv12Frame->height,
-                              rgbFrame->data,rgbFrame->linesize);
+                              rgbFrame->data,
+                              rgbFrame->linesize);
 
-                    QImage img(out_buffer,
-                               videoCodecCtx->width,videoCodecCtx->height,
-                               QImage::Format_RGB32);
-                    emit sendQImage(img);
+                    //QImage img(out_buffer,
+                    //           videoCodecCtx->width,videoCodecCtx->height,
+                    //           QImage::Format_RGB32);
+                    //emit sendQImage(img);
 
-                    QThread::msleep(30);
+                    if(0){
+                        SDL_Surface* pSDLSurface = SDL_CreateRGBSurfaceFrom(out_buffer,
+                                                               nv12Frame->width,
+                                                               nv12Frame->height,
+                                                               4 * 8,
+                                                               nv12Frame->width * 4,
+                                                               0x000000FF,
+                                                               0x0000FF00,
+                                                               0x00FF0000,
+                                                               0xFF000000
+                                                               );
+                        SDL_Texture* pSDLTexture = SDL_CreateTextureFromSurface(pSDLRenderer, pSDLSurface);
+
+                        SDL_FreeSurface(pSDLSurface);
+        //                pSDLSurface = SDL_LoadBMP("testBMP/1.bmp");
+        //                pSDLTexture = SDL_CreateTextureFromSurface(pSDLRenderer, pSDLSurface);
+
+                        // 清除Renderer
+                        SDL_RenderClear(pSDLRenderer);
+                        // Texture复制到Renderer
+                        SDL_RenderCopy(pSDLRenderer, pSDLTexture, 0, 0);
+                        // 更新Renderer显示
+                        SDL_RenderPresent(pSDLRenderer);
+                    }
+
+                    if(0){
+                        QImage *pimg = new QImage(out_buffer,
+                                              videoCodecCtx->width,videoCodecCtx->height,
+                                              QImage::Format_RGB32);
+
+                        IMG img;img.img=pimg;img.pts=yuvFrame->pts;
+                        //Images.push_back(img);
+                    }
+
+                    QThread::msleep(0);
                 }
             }
             av_packet_unref(pkt);
@@ -216,11 +283,117 @@ void FFmpegVideo::run()
     qDebug()<<"Thread stop now";
 }
 
+
+void PlayVideo::run()
+{
+    double PCFreq = 0.0;
+    LARGE_INTEGER freq;
+
+    LARGE_INTEGER li;
+    if(!QueryPerformanceFrequency(&li)){
+        qDebug() <<"QueryPerformanceFrequency failed!";
+    }
+
+    PCFreq = double(li.QuadPart)/1000.0;
+
+    QueryPerformanceCounter(&li);
+    int64_t CounterStart = li.QuadPart;
+
+    int64_t lipre=CounterStart;
+
+    MMRESULT rx = timeBeginPeriod(1);
+    ::Sleep(0);
+
+    int64_t pts_pre=0;
+    bool disp=0;
+    int sleeptime=37;
+
+    if(rx != TIMERR_NOERROR){
+        qDebug() <<"timeBeginPeriod failed!";
+        sleeptime=390;
+    }
+
+    while(1){
+        if(stopFlag) break;
+
+        if(Images.size()>0){
+            IMG img = Images.front();
+            Images.pop_front();
+
+            if(!disp)
+            {
+                QueryPerformanceCounter(&li);
+                //(li.QuadPart-lipre)/PCFreq;
+
+                QThread::yieldCurrentThread();
+                emit sendQImage(img);//
+
+                //qDebug()<< "S" <<QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*")<<img.pts-pts_pre<<(li.QuadPart-lipre)/PCFreq<<Images.size();
+                //QThread::yieldCurrentThread();
+                //disp=1;
+                lipre= li.QuadPart;
+            }
+
+            if(Images.size()>6){
+                //qDebug()<< "S" <<QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*")<<img.pts-pts_pre<<Images.size();
+                sleeptime--;
+                if(sleeptime<=25)sleeptime=25;
+            }else
+            {
+                sleeptime++;
+                if(sleeptime>=37)sleeptime=37;
+            }
+
+            pts_pre=img.pts;
+            //delete img.img;
+        }
+        else{
+
+        }
+
+        //NSSleep(sleeptime);
+        //QThread::usleep(sleeptime*1000);
+        QThread::msleep(sleeptime);
+
+    }
+
+    rx = timeEndPeriod(1);
+
+    qDebug()<<"PlayVideo Thread end now";
+}
+
+
 FFmpegWidget::FFmpegWidget(QWidget *parent) : QWidget(parent)
 {
     ffmpeg = new FFmpegVideo;
-    connect(ffmpeg,SIGNAL(sendQImage(QImage)),this,SLOT(receiveQImage(QImage)));
+    connect(ffmpeg,SIGNAL(sendQImage(QImage)),this,SLOT(receiveQImage(QImage)),Qt::DirectConnection);
     connect(ffmpeg,&FFmpegVideo::finished,ffmpeg,&FFmpegVideo::deleteLater);
+
+    playf  = new PlayVideo;
+
+    //connect(ffmpeg,SIGNAL(snedQImage(IMG)),this,SLOT(receiveQImage(IMG)),Qt::DirectConnection);
+    connect(playf, SIGNAL(sendQImage(IMG)),this,SLOT(receiveQImage(IMG)),Qt::DirectConnection);
+
+    if(1)
+    {
+        _window = SDL_CreateWindow("SDL",SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED,
+                                  800, 600, SDL_WINDOW_OPENGL);//From((void*)ui->widget->window()->winId());// ->windowHandle());
+        _pScreens = SDL_GetWindowSurface(_window);
+
+        pSDLRenderer = SDL_CreateRenderer(_window, -1, 0);
+
+        _pload = SDL_LoadBMP("C:\\Dev\\vlcsnap.bmp");
+
+         SDL_BlitSurface(_pload,NULL,_pScreens,NULL);
+         SDL_UpdateWindowSurface(_window);
+        return;
+    }
+
+    SDL_Window * window;  //->winId()
+    window = SDL_CreateWindowFrom( (void*)this->winId() );//  (void*)ui->widget->window()->winId());// ->windowHandle());
+    SDL_Surface * _pScreens = SDL_GetWindowSurface(window);
+
+    SDL_LoadBMP("C:\\Dev\\vlcsnap.bmp");
 }
 
 FFmpegWidget::~FFmpegWidget()
@@ -233,8 +406,20 @@ FFmpegWidget::~FFmpegWidget()
 
 void FFmpegWidget::play(QString url)
 {
+
+    if(0) {
+        SDL_Window * window;  //->winId()
+        window = SDL_CreateWindowFrom( (void*)this->windowHandle() );//  (void*)ui->widget->window()->winId());// ->windowHandle());
+        SDL_Surface * _pScreens = SDL_GetWindowSurface(window);
+
+        SDL_LoadBMP("C:\\Dev\\vlcsnap.bmp");
+
+        return ;
+    }
+
     ffmpeg->setPath(url);
     ffmpeg->start();
+    playf->start();
 }
 
 void FFmpegWidget::stop()
@@ -250,11 +435,29 @@ void FFmpegWidget::stop()
 void FFmpegWidget::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
-    painter.drawImage(0,0,img);
+    //painter.drawImage(0,0,img);
 }
 
-void FFmpegWidget::receiveQImage(const QImage &rImg)
+void FFmpegWidget::receiveQImage(const IMG &rImg)
 {
-    img = rImg.scaled(this->size());
+    QDateTime startDT = QDateTime::currentDateTime();
+    static QDateTime preDT = QDateTime::currentDateTime();
+
+    int delta = (startDT.time().msec()-preDT.time().msec());
+    if(delta<0) delta+=1000;
+
+    //delta-=40;
+
+    static int64_t pts_pre=0;
+    //QThread::yieldCurrentThread();
+
+    //img = rImg.img->scaled(nw,nh);//KeepAspectRatioByExpanding  KeepAspectRatio SmoothTransformation FastTransformation
+
+    img = rImg.img->scaled(this->size(),Qt::KeepAspectRatio,Qt::SmoothTransformation);
+    qDebug()<< "R" <<startDT.toString("-hh:mm:ss.zzz-")<< QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*") << delta << rImg.pts-pts_pre<<rImg.pts;
+    pts_pre=rImg.pts; preDT = startDT;
+    delete rImg.img;
+
     update();
+    QThread::yieldCurrentThread();
 }

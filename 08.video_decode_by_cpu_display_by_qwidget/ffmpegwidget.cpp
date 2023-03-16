@@ -120,7 +120,7 @@ void FFmpegVideo::run()
                                videoCodecCtx->width,videoCodecCtx->height,
                                QImage::Format_RGB32);
                     emit sendQImage(img);
-                    QThread::msleep(30);
+                    QThread::msleep(0);
                 }
             }
             av_packet_unref(pkt);
