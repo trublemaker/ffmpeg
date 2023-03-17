@@ -123,7 +123,7 @@ void FFmpegDecoder::run()
 
                     emit newFrame();
 
-                    QThread::msleep(24);
+                    QThread::msleep(0);
                 }
             }
             av_packet_unref(pkt);

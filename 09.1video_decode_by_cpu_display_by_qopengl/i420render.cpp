@@ -1,5 +1,7 @@
 #include "i420render.h"
 
+#include <QTime>
+
 #define ATTRIB_VERTEX 0
 #define ATTRIB_TEXTURE 1
 
@@ -14,7 +16,7 @@ I420Render::I420Render(QWidget *parent)
     });
     connect(decoder,&FFmpegDecoder::newFrame,[=](){
         update();
-    });
+    }); //Qt::DirectConnection
 }
 
 I420Render::~I420Render()
@@ -175,5 +177,5 @@ void I420Render::paintGL()
     glUniform1i(m_textureUniformV, 2);
 
     glDrawArrays(GL_TRIANGLE_STRIP,0,4);
-    qDebug() << "paintGL";
+    qDebug() << qPrintable(QTime::currentTime().toString("hh:mm:ss zzz")) <<"paintGL";
 }
