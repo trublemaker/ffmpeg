@@ -59,7 +59,7 @@ private:
     AVPacket        *pkt          = NULL;
     AVFrame         *yuvFrame     = NULL;
     AVFrame         *rgbFrame     = NULL;
-
+    AVFrame         *nv21Frame     = NULL;
     struct SwsContext *img_ctx=NULL;
 
     uchar *out_buffer= nullptr;
