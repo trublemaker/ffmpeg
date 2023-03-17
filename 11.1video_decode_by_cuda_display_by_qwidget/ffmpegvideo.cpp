@@ -7,11 +7,7 @@
 
 list<IMG> Images;
 
-SDL_Window  * _window;
-SDL_Surface * _pScreens ;
-SDL_Surface *_pload ;
-SDL_Renderer*pSDLRenderer;
-SDL_Texture *texture;
+
 
 typedef struct DecodeContext{
     AVBufferRef *hw_device_ref;
@@ -132,20 +128,22 @@ int FFmpegVideo::open_input_file()
         return -1;
     }
 
+    AVPixelFormat src = videoCodecCtx->pix_fmt;AV_PIX_FMT_NV12;
     img_ctx = sws_getContext(videoCodecCtx->width,
                              videoCodecCtx->height,
-                             AV_PIX_FMT_NV12 ,//  AV_PIX_FMT_NV12, AV_PIX_FMT_YUV420P
+                             AV_PIX_FMT_NV21,//AV_PIX_FMT_NV12//videoCodecCtx->pix_fmt, //AV_PIX_FMT_NV12 ,//  AV_PIX_FMT_NV12, AV_PIX_FMT_YUV420P
                              videoCodecCtx->width,
                              videoCodecCtx->height,
-                             AV_PIX_FMT_RGB32,
-                             SWS_BICUBIC,NULL,NULL,NULL);
+                             AV_PIX_FMT_NV21,//AV_PIX_FMT_RGB32, AV_PIX_FMT_NV12
+                             SWS_BICUBIC,//SWS_BICUBIC, SWS_BILINEAR
+                             NULL,NULL,NULL);
 
-    numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGB32,videoCodecCtx->width,videoCodecCtx->height,1);
+    numBytes = av_image_get_buffer_size(AV_PIX_FMT_YUV420P,videoCodecCtx->width,videoCodecCtx->height,1);
     out_buffer = (unsigned char *)av_malloc(numBytes*sizeof(uchar));
 
     int res = av_image_fill_arrays(
                 rgbFrame->data,rgbFrame->linesize,
-                out_buffer,AV_PIX_FMT_RGB32,
+                out_buffer,AV_PIX_FMT_YUV420P,
                 videoCodecCtx->width,videoCodecCtx->height,1);
     if(res<0){
         qDebug()<<"Fill arrays failed.";
@@ -189,15 +187,51 @@ void FFmpegVideo::stopThread()
     stopFlag=true;
 }
 
+SDL_Window  *   win;
+SDL_Surface *   _pScreens ;
+SDL_Surface *   _pload ;
+SDL_Renderer*   renderer;
+SDL_Texture *   texture;
+
 void FFmpegVideo::run()
 {
     if(!openFlag){
         open_input_file();
     }
 
-    texture = SDL_CreateTexture(pSDLRenderer, SDL_PIXELFORMAT_IYUV,
-                                SDL_TEXTUREACCESS_STREAMING,
-                                1920, 1080);
+    //创建输出窗口
+    win = SDL_CreateWindow("SDL Video Player",
+        SDL_WINDOWPOS_UNDEFINED,
+        SDL_WINDOWPOS_UNDEFINED,
+        1920/2+5, 1080/2+5,
+        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+
+    if (!win) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create window!");
+        //goto __FAIL;
+    }
+
+    //SDL渲染器
+    renderer = SDL_CreateRenderer(win, -1, 0);
+    if (!renderer) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create renderer!");
+        //goto __FAIL;
+    }
+
+    //创建显示帧
+    Uint32 pixformat = SDL_PIXELFORMAT_IYUV;
+    texture = SDL_CreateTexture(renderer,
+        pixformat,
+        SDL_TEXTUREACCESS_STREAMING,
+        1920,
+        1080);
+
+    if (!texture)
+    {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create Texture!");
+        //goto __FAIL;
+    }
+
 
     while(av_read_frame(fmtCtx,pkt)>=0){
         if(stopFlag) break;
@@ -218,14 +252,18 @@ void FFmpegVideo::run()
                         }
                     }
 
-                    if(1){
+                    if(0){
                         SDL_UpdateYUVTexture(texture, NULL, nv12Frame->data[0],
                                 nv12Frame->linesize[0], nv12Frame->data[1], nv12Frame->linesize[1],
                                 nv12Frame->data[2], nv12Frame->linesize[2]);
-                        SDL_RenderClear(pSDLRenderer);
-                        SDL_RenderCopy(pSDLRenderer, texture, NULL, NULL);
-                        SDL_RenderPresent(pSDLRenderer);
+                        //SDL_RenderClear(pSDLRenderer);
+                        //SDL_RenderCopy(pSDLRenderer, texture, NULL, NULL);
+                        //SDL_RenderPresent(pSDLRenderer);
                     }
+
+                    //图像数据格式
+                    uint8_t* dst_data[4] = { 0 };
+                    int dst_linesize[4] = { 0 };
 
                     sws_scale(img_ctx,
                               (const uint8_t* const*)nv12Frame->data,
@@ -235,6 +273,26 @@ void FFmpegVideo::run()
                               rgbFrame->data,
                               rgbFrame->linesize);
 
+                    if(1-1){
+                        //渲染图像
+                        SDL_UpdateYUVTexture(texture, NULL,
+                            rgbFrame->data[0], rgbFrame->linesize[0],
+                            rgbFrame->data[1], rgbFrame->linesize[1],
+                            rgbFrame->data[2], rgbFrame->linesize[2]);
+
+                        SDL_Rect rect;
+                        rect.x = 0;
+                        rect.y = 0;
+                        rect.w = 1920/2;
+                        rect.h = 1080/2;
+
+                        SDL_RenderClear(renderer);
+                        SDL_RenderCopy(renderer, texture, NULL, &rect);
+                        SDL_RenderPresent(renderer);
+                        SDL_Delay(1000 / 30);
+                        //av_packet_unref(&packet);
+                        //SDL_PollEvent(&event);
+                    }
                     //QImage img(out_buffer,
                     //           videoCodecCtx->width,videoCodecCtx->height,
                     //           QImage::Format_RGB32);
@@ -251,27 +309,27 @@ void FFmpegVideo::run()
                                                                0x00FF0000,
                                                                0xFF000000
                                                                );
-                        SDL_Texture* pSDLTexture = SDL_CreateTextureFromSurface(pSDLRenderer, pSDLSurface);
+                        //SDL_Texture* pSDLTexture = SDL_CreateTextureFromSurface(pSDLRenderer, pSDLSurface);
 
                         SDL_FreeSurface(pSDLSurface);
         //                pSDLSurface = SDL_LoadBMP("testBMP/1.bmp");
         //                pSDLTexture = SDL_CreateTextureFromSurface(pSDLRenderer, pSDLSurface);
 
                         // 清除Renderer
-                        SDL_RenderClear(pSDLRenderer);
+                        //SDL_RenderClear(pSDLRenderer);
                         // Texture复制到Renderer
-                        SDL_RenderCopy(pSDLRenderer, pSDLTexture, 0, 0);
+                        //SDL_RenderCopy(pSDLRenderer, pSDLTexture, 0, 0);
                         // 更新Renderer显示
-                        SDL_RenderPresent(pSDLRenderer);
+                        //SDL_RenderPresent(pSDLRenderer);
                     }
 
-                    if(0){
+                    if(1){
                         QImage *pimg = new QImage(out_buffer,
                                               videoCodecCtx->width,videoCodecCtx->height,
                                               QImage::Format_RGB32);
 
                         IMG img;img.img=pimg;img.pts=yuvFrame->pts;
-                        //Images.push_back(img);
+                        Images.push_back(img);
                     }
 
                     QThread::msleep(0);
@@ -353,7 +411,9 @@ void PlayVideo::run()
 
         //NSSleep(sleeptime);
         //QThread::usleep(sleeptime*1000);
-        QThread::msleep(sleeptime);
+        //QThread::msleep(sleeptime);
+        //av_usleep(sleeptime*1000);
+        ::Sleep(sleeptime);
 
     }
 
@@ -376,16 +436,16 @@ FFmpegWidget::FFmpegWidget(QWidget *parent) : QWidget(parent)
 
     if(1)
     {
-        _window = SDL_CreateWindow("SDL",SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED,
-                                  800, 600, SDL_WINDOW_OPENGL);//From((void*)ui->widget->window()->winId());// ->windowHandle());
-        _pScreens = SDL_GetWindowSurface(_window);
+        //_window = SDL_CreateWindow("SDL",SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED,
+        //                          800, 600, SDL_WINDOW_OPENGL);//From((void*)ui->widget->window()->winId());// ->windowHandle());
+        //_pScreens = SDL_GetWindowSurface(_window);
 
-        pSDLRenderer = SDL_CreateRenderer(_window, -1, 0);
+        //pSDLRenderer = SDL_CreateRenderer(_window, -1, 0);
 
-        _pload = SDL_LoadBMP("C:\\Dev\\vlcsnap.bmp");
+        //_pload = SDL_LoadBMP("C:\\Dev\\vlcsnap.bmp");
 
-         SDL_BlitSurface(_pload,NULL,_pScreens,NULL);
-         SDL_UpdateWindowSurface(_window);
+         //SDL_BlitSurface(_pload,NULL,_pScreens,NULL);
+        // SDL_UpdateWindowSurface(_window);
         return;
     }
 
@@ -453,7 +513,7 @@ void FFmpegWidget::receiveQImage(const IMG &rImg)
 
     //img = rImg.img->scaled(nw,nh);//KeepAspectRatioByExpanding  KeepAspectRatio SmoothTransformation FastTransformation
 
-    img = rImg.img->scaled(this->size(),Qt::KeepAspectRatio,Qt::SmoothTransformation);
+    //img = rImg.img->scaled(this->size(),Qt::KeepAspectRatio,Qt::SmoothTransformation);
     qDebug()<< "R" <<startDT.toString("-hh:mm:ss.zzz-")<< QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*") << delta << rImg.pts-pts_pre<<rImg.pts;
     pts_pre=rImg.pts; preDT = startDT;
     delete rImg.img;

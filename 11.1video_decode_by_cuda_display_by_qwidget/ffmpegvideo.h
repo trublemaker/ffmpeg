@@ -27,6 +27,7 @@ extern "C"{
 #include <libavutil/mem.h>
 #include <libswscale/swscale.h>
 #include <libavformat/avformat.h>
+#include <libavutil/time.h>
 }
 
 using namespace std;
