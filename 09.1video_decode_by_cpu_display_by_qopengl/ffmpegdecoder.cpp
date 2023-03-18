@@ -1,6 +1,7 @@
 #ifndef __rasp_pi2__
 
 #include "ffmpegdecoder.h"
+#include <windows.h>
 
 static AVPixelFormat hw_pix_fmt;
 static AVBufferRef* hw_device_ctx=NULL;
@@ -167,11 +168,25 @@ void FFmpegDecoder::run()
                              AV_PIX_FMT_YUV420P, //
                              SWS_BILINEAR,NULL,NULL,NULL); //SWS_FAST_BILINEAR
 
-
     int res = av_image_fill_arrays(
                 rgbFrame->data,rgbFrame->linesize,
                 out_buffer,AV_PIX_FMT_YUV420P,
                 videoCodecCtx->width,videoCodecCtx->height,1);
+
+    double PCFreq = 0.0;
+    LARGE_INTEGER freq;
+
+    LARGE_INTEGER li;
+    if(!QueryPerformanceFrequency(&li)){
+        qDebug() <<"QueryPerformanceFrequency failed!";
+    }
+
+    PCFreq = double(li.QuadPart)/1000.0;
+
+    QueryPerformanceCounter(&li);
+    int64_t CounterStart = li.QuadPart;
+
+    int64_t lipre=CounterStart;
 
     while(av_read_frame(fmtCtx,pkt)>=0){
         if(pkt->stream_index == videoStreamIndex){
@@ -186,9 +201,27 @@ void FFmpegDecoder::run()
                     }
 
                     if(yuvFrame->format==videoCodecCtx->pix_fmt){
-                        if((ret = av_hwframe_transfer_data(nv21Frame,yuvFrame,0))<0){
-                            continue;
+
+#if 0
+                            //*test av_hwframe_map and av_hwframe_transfer_data
+                            LARGE_INTEGER li1,li2;
+                            QueryPerformanceCounter(&li);
+                            av_hwframe_transfer_data(nv21Frame,yuvFrame,0);
+                            QueryPerformanceCounter(&li1);
+                            av_hwframe_map(nv21Frame,yuvFrame,0);
+                            QueryPerformanceCounter(&li2);
+                            int64_t ticks1 = li1.QuadPart-li.QuadPart
+                                    ,ticks2=li2.QuadPart-li1.QuadPart;
+                            qDebug()<< ticks1 << ticks2 << (ticks1)/PCFreq << (ticks2)/PCFreq;
+                            //146951 21 10.2632 0.00146667 //4k
+#endif
+                        //*
+                        if( av_hwframe_map(nv21Frame,yuvFrame,0) == 0 ){
+
                         }
+                        else if((ret = av_hwframe_transfer_data(nv21Frame,yuvFrame,0))<0){
+                            continue;
+                        }//*/
                     }
 
                     int f1 = yuvFrame->format;
@@ -228,10 +261,9 @@ void FFmpegDecoder::run()
                               rgbFrame->data,//(uint8_t* [])out_buffer
                               rgbFrame->linesize);
 
-                    //AVERROR
-                    if(r){
-                        //av_strerror(r,(char*)out_buffer,numBytes);
-                        //av_free(out_buffer);
+                    if(r){ //AVERROR
+                        //char buf[256]={0};
+                        //av_strerror(r,buf,sizeof(buf)-1);
                     }
 
                     int bytes =0;
