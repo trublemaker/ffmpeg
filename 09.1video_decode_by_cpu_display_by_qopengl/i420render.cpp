@@ -14,9 +14,14 @@ I420Render::I420Render(QWidget *parent)
         width = w;
         height = h;
     });
-    connect(decoder,&FFmpegDecoder::newFrame,[=](){
+
+    auto by_val_lambda = [=](){
         update();
-    }); //Qt::DirectConnection
+    } ;
+
+    connect(decoder,&FFmpegDecoder::newFrame, by_val_lambda);
+    //method 2
+    //connect(decoder,&FFmpegDecoder::newFrame, this, by_val_lambda, Qt::DirectConnection);
 }
 
 I420Render::~I420Render()
@@ -120,23 +125,23 @@ void I420Render::initializeGL()
     glGenTextures(1, &m_idy);
     //Y
     glBindTexture(GL_TEXTURE_2D, m_idy);
-    //放大过滤，线性插值   GL_NEAREST(效率高，但马赛克严重)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    //放大过滤，线性插值   GL_NEAREST(效率高，但马赛克严重) GL_LINEAR
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
     //U
     glGenTextures(1, &m_idu);
     glBindTexture(GL_TEXTURE_2D, m_idu);
     //放大过滤，线性插值
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
     //V
     glGenTextures(1, &m_idv);
     glBindTexture(GL_TEXTURE_2D, m_idv);
     //放大过滤，线性插值
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -151,6 +156,8 @@ void I420Render::resizeGL(int w, int h)
 
 void I420Render::paintGL()
 {
+    static QTime tp = QTime::currentTime();
+
     if(ptr ==NULL) return;
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -177,5 +184,7 @@ void I420Render::paintGL()
     glUniform1i(m_textureUniformV, 2);
 
     glDrawArrays(GL_TRIANGLE_STRIP,0,4);
-    qDebug() << qPrintable(QTime::currentTime().toString("hh:mm:ss zzz")) <<"paintGL";
+    qDebug() << qPrintable(tp.toString("hh:mm:ss.zzz"))<< qPrintable(QTime::currentTime().toString("hh:mm:ss.zzz")) <<"paintGL";
+
+    tp = QTime::currentTime();
 }

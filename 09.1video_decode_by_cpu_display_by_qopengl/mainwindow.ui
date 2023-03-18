@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>696</width>
+    <width>800</width>
     <height>574</height>
    </rect>
   </property>
@@ -25,7 +25,7 @@
     <item row="0" column="1">
      <widget class="QLineEdit" name="lineUrl">
       <property name="text">
-       <string>http://192.168.1.26:7088/rtp/239.93.0.66:5140</string>
+       <string>http://192.168.7.238:7088/rtp/239.93.0.66:5140</string>
       </property>
      </widget>
     </item>
@@ -46,8 +46,8 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>696</width>
-     <height>23</height>
+     <width>800</width>
+     <height>22</height>
     </rect>
    </property>
   </widget>

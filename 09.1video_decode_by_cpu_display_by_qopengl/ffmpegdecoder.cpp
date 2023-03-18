@@ -71,7 +71,7 @@ void FFmpegDecoder::run()
     AVHWDeviceType type;
 
     /* cuda dxva2 qsv d3d11va */
-    type = av_hwdevice_find_type_by_name("dxva2");//cuda
+    type = av_hwdevice_find_type_by_name("cuda");//cuda
     if (type == AV_HWDEVICE_TYPE_NONE) {
         fprintf(stderr, "Device type %s is not supported.\n", "h264_cuvid");
         fprintf(stderr, "Available device types:");
@@ -111,7 +111,6 @@ void FFmpegDecoder::run()
             break;
         }
     }
-
 
     int streamCnt=fmtCtx->nb_streams;
     for(int i=0;i<streamCnt;i++){
@@ -166,7 +165,7 @@ void FFmpegDecoder::run()
                              videoCodecCtx->width,
                              videoCodecCtx->height,
                              AV_PIX_FMT_YUV420P, //
-                             SWS_FAST_BILINEAR,NULL,NULL,NULL);
+                             SWS_BILINEAR,NULL,NULL,NULL); //SWS_FAST_BILINEAR
 
 
     int res = av_image_fill_arrays(
@@ -205,14 +204,14 @@ void FFmpegDecoder::run()
                         emit sigFirst(out_buffer,w,h);
                     }
 
-                    uint8_t* dst_data[4] = { 0 };
-                    int dst_linesize[4] = { 0 };
+                    //uint8_t* dst_data[4] = { 0 };
+                    //int dst_linesize[4] = { 0 };
 
-                    numBytes = sizeof(AVFrame);
+                    //numBytes = sizeof(AVFrame);
 
-                    numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGB32,videoCodecCtx->width,videoCodecCtx->height,1);
-                    numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV12,videoCodecCtx->width,videoCodecCtx->height,1);
-                    numBytes = av_image_get_buffer_size(AV_PIX_FMT_YUV420P,videoCodecCtx->width,videoCodecCtx->height,1);
+                    //numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGB32,videoCodecCtx->width,videoCodecCtx->height,1);
+                    //numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV12,videoCodecCtx->width,videoCodecCtx->height,1);
+                    //numBytes = av_image_get_buffer_size(AV_PIX_FMT_YUV420P,videoCodecCtx->width,videoCodecCtx->height,1);
 
                     //out_buffer = (unsigned char *)av_malloc(numBytes*sizeof(uchar));
                     //memset(out_buffer,0,numBytes);
@@ -225,7 +224,7 @@ void FFmpegDecoder::run()
                               (const uint8_t* const*)nv21Frame->data,
                               (const int*)nv21Frame->linesize,
                               0,
-                              1080,
+                              nv21Frame->height,
                               rgbFrame->data,//(uint8_t* [])out_buffer
                               rgbFrame->linesize);
 
@@ -254,7 +253,7 @@ void FFmpegDecoder::run()
 
                     emit newFrame();
 
-                    QThread::msleep(10);
+                    QThread::msleep(0);
                 }
             }
             av_packet_unref(pkt);
