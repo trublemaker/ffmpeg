@@ -5,6 +5,12 @@
 #include <Windows.h>
 #include <SDL.h>
 
+#include <mutex>
+#include <thread>
+#include <vector>
+
+std::mutex g_mutex;
+
 #include <tuple>
 using std::tuple;
 
@@ -286,15 +292,16 @@ void FFmpegVideo::run()
                     }
 
                     if(yuvFrame->format==videoCodecCtx->pix_fmt){
-                        int ret = -1;//av_hwframe_map(nv12Frame,yuvFrame,0);
-                        if(0*ret){ //AVERROR
+                        nv12Frame->format=AV_PIX_FMT_NV12;
+                        int ret = -22;//av_hwframe_map(nv12Frame,yuvFrame,0);
+                        if(0*ret<0){ //AVERROR
                             char buf[256]={0};
                             av_strerror(ret,buf,sizeof(buf)-1);
+                            qDebug()<<"av_hwframe_map error: "<< buf;
                             buf[255]=0;
                         }
 
                         if( ret >= 0 ){
-
                         }
                         else {
                             //qDebug()<<"av_hwframe_map failue use av_hwframe_transfer_data";
@@ -353,8 +360,9 @@ void FFmpegVideo::run()
                             //memcpy(out_buffer1, nv12Frame->data,numBytes);
                         }
                         memcpy(out_buffer1, out_buffer,numBytes);
-
+                        g_mutex.lock();
                         frameTupleList.push_back(make_tuple(yuvFrame->pts,out_buffer1) );
+                        g_mutex.unlock();
                     }
                     else{
                         // numBytes;
@@ -423,7 +431,6 @@ void PlayVideo::run()
         if(frameTupleList.size()>0){
 
             tuple<int64_t /*pts*/, uchar*/*buffer*/ > tuple = frameTupleList.front();
-            frameTupleList.pop_front();
 
             int64_t pts = get<0>(tuple);
             uchar*  buf = get<1>(tuple);
@@ -474,7 +481,12 @@ void PlayVideo::run()
             int sleepms = 40.0 -  deltatime;
             if(sleepms<0)sleepms=5;
             else if(sleepms>40) sleepms=40;
-            qDebug()<< "Render "<< sleepms << totaltimes << deltatime;
+
+            g_mutex.lock();
+            frameTupleList.pop_front();
+            g_mutex.unlock();
+
+            qDebug("Render sleepms:%2d PlayTime:%5d deltaTime:%2d",sleepms ,totaltimes ,deltatime);
             ::Sleep(sleepms);
             //::WaitForSingleObject()
             //QueryPerformanceCounter(&li);
@@ -577,7 +589,6 @@ FFmpegWidget::~FFmpegWidget()
 
 void FFmpegWidget::play(QString url)
 {
-
     if(0) {
         SDL_Window * window;  //->winId()
         window = SDL_CreateWindowFrom( (void*)this->windowHandle() );//  (void*)ui->widget->window()->winId());// ->windowHandle());
