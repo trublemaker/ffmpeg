@@ -3,6 +3,11 @@
 #include "ffmpegdecoder.h"
 #include <windows.h>
 
+#include <list>
+#include <QTime>
+
+std::list<std::pair<int64_t, uchar *>> Frames;
+
 static AVPixelFormat hw_pix_fmt;
 static AVBufferRef* hw_device_ctx=NULL;
 
@@ -67,11 +72,12 @@ int hw_decoder_init(AVCodecContext *ctx, const AVHWDeviceType type)
     return err;
 }
 
+
 void FFmpegDecoder::run()
 {
     AVHWDeviceType type;
 
-    /* cuda dxva2 qsv d3d11va */
+    /*cuda dxva2 d3d11va qsv*/
     type = av_hwdevice_find_type_by_name("cuda");//cuda
     if (type == AV_HWDEVICE_TYPE_NONE) {
         fprintf(stderr, "Device type %s is not supported.\n", "h264_cuvid");
@@ -216,7 +222,9 @@ void FFmpegDecoder::run()
                             //146951 21 10.2632 0.00146667 //4k
 #endif
                         //*
-                        if( av_hwframe_map(nv21Frame,yuvFrame,0) == 0 ){
+
+                        int ret = -1;//av_hwframe_map(nv21Frame,yuvFrame,0);
+                        if( ret == 0 ){
 
                         }
                         else if((ret = av_hwframe_transfer_data(nv21Frame,yuvFrame,0))<0){
@@ -229,6 +237,7 @@ void FFmpegDecoder::run()
                     int f3 = AV_PIX_FMT_YUV420P;
                     int f4 = AV_PIX_FMT_NV12;
 
+                    //HW->NV12->YUV420P
                     //default YUV420P
                     //rgb = AV_PIX_FMT_NV12 = 23
 
@@ -283,7 +292,11 @@ void FFmpegDecoder::run()
                         bytes+=w/2;
                     }
 
-                    emit newFrame();
+                    uchar* buf= (uchar*)av_malloc(numBytes);
+                    memcpy(buf,out_buffer,numBytes);
+
+                    Frames.push_back(std::make_pair(yuvFrame->pts,buf));
+                    //emit newFrame();
 
                     QThread::msleep(0);
                 }
@@ -292,4 +305,27 @@ void FFmpegDecoder::run()
         }
     }
 }
+
+void FrameSender::run(){
+    //std::vector<std::pair<int64_t, uchar *>> Frames;
+    std::pair<int64_t, uchar *> p;
+    while(1){
+        if(Frames.size()>0){
+            p =  Frames.front();
+            emit newFrame();
+            qDebug() <<  qPrintable(QTime::currentTime().toString("hh:mm:ss.zzz")) <<"emit newFrame()";
+            Sleep(5);
+            //qDebug()<< p.first ;
+            uchar *buf = p.second;
+            av_free(buf);
+            Frames.pop_front();
+
+            //Sleep(10);
+        }
+        else{
+            Sleep(10);
+        }
+    }
+}
+
 #endif

@@ -36,6 +36,7 @@ private:
     int width,height;
 
     FFmpegDecoder *decoder;
+    FrameSender   *framesender;
 
     uchar* ptr;
 };

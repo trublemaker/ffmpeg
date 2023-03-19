@@ -18,6 +18,7 @@ public:
 
 private slots:
     void on_btnPS_clicked();
+    virtual void resizeEvent(QResizeEvent *event) override;
 
 private:
     Ui::MainWindow *ui;

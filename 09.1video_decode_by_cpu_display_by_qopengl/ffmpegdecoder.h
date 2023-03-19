@@ -74,4 +74,46 @@ private:
     int w,h;
 };
 
+
+class FrameSender : public QThread
+{
+    Q_OBJECT
+public:
+    FrameSender(){};
+    ~FrameSender(){};
+
+
+    ///
+    /// \brief getFrame 从解码结果缓存队列中取第一帧显示
+    /// \return 第一帧数据指针
+    ///
+
+protected:
+    void run();
+
+signals:
+    //void sigFirst(uchar* p,int w,int h);
+    void newFrame();
+
+private:
+    AVFormatContext *fmtCtx       =NULL;
+    const AVCodec         *videoCodec   =NULL;
+    AVCodecContext  *videoCodecCtx=NULL;
+    AVPacket        *pkt          = NULL;
+    AVFrame         *yuvFrame     = NULL;
+    AVFrame         *rgbFrame     = NULL;
+    AVFrame         *nv21Frame     = NULL;
+    struct SwsContext *img_ctx=NULL;
+
+    uchar *out_buffer= nullptr;
+
+    int videoStreamIndex =-1;
+    int numBytes = -1;
+
+    QString _url;
+
+    bool isFirst = true;
+
+    int w,h;
+};
 #endif // FFMPEGDECODER_H

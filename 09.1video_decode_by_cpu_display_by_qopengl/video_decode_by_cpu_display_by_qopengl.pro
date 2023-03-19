@@ -48,3 +48,15 @@ HEADERS += \
 
 FORMS += \
         mainwindow.ui
+
+#static const char *const hw_type_names[] = {
+#    [AV_HWDEVICE_TYPE_CUDA]   = "cuda",   //CUDA是Nvidia出的一个GPU计算库
+#    [AV_HWDEVICE_TYPE_DRM]    = "drm",  //DRM 是linux 下的图形渲染架构(Direct Render Manager)
+#    [AV_HWDEVICE_TYPE_DXVA2]  = "dxva2",//微软dx套件，使用D3D9
+#    [AV_HWDEVICE_TYPE_D3D11VA] = "d3d11va",//微软dx套件，使用D3D11
+#    [AV_HWDEVICE_TYPE_OPENCL] = "opencl",//第一个面向异构系统(此系统中可由CPU，GPU或其它类型的处理器架构组成)的并行编程的开放式标准。面向GPU编程
+#    [AV_HWDEVICE_TYPE_QSV]    = "qsv",//英特尔Quick Sync Video，号称地球最强
+#    [AV_HWDEVICE_TYPE_VAAPI]  = "vaapi",  //Video Acceleration Api，UNINX下的编码接口，intel提供
+#    [AV_HWDEVICE_TYPE_VDPAU]  = "vdpau",  //Video Decode and Presentation API for Unix ，NVIDIA提供的
+#    [AV_HWDEVICE_TYPE_VIDEOTOOLBOX] = "videotoolbox", // mac iOS
+#    [AV_HWDEVICE_TYPE_MEDIACODEC] = "mediacodec",  // Android

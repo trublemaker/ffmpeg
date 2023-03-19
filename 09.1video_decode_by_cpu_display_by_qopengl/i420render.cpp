@@ -9,6 +9,7 @@ I420Render::I420Render(QWidget *parent)
     :QOpenGLWidget(parent)
 {
     decoder = new FFmpegDecoder;
+    framesender = new FrameSender;
     connect(decoder,&FFmpegDecoder::sigFirst,[=](uchar* p,int w,int h){
         ptr = p;
         width = w;
@@ -19,9 +20,12 @@ I420Render::I420Render(QWidget *parent)
         update();
     } ;
 
-    connect(decoder,&FFmpegDecoder::newFrame, by_val_lambda);
+    //connect(decoder,&FFmpegDecoder::newFrame, by_val_lambda);
+    //connect(framesender,&FrameSender::newFrame, by_val_lambda);
+
     //method 2
     //connect(decoder,&FFmpegDecoder::newFrame, this, by_val_lambda, Qt::DirectConnection);
+    connect(framesender,&FrameSender::newFrame, this, by_val_lambda, Qt::DirectConnection);
 }
 
 I420Render::~I420Render()
@@ -35,6 +39,7 @@ void I420Render::setUrl(QString url)
 
 void I420Render::startVideo()
 {
+    framesender->start();
     decoder->start();
 }
 
@@ -125,23 +130,25 @@ void I420Render::initializeGL()
     glGenTextures(1, &m_idy);
     //Y
     glBindTexture(GL_TEXTURE_2D, m_idy);
+
     //放大过滤，线性插值   GL_NEAREST(效率高，但马赛克严重) GL_LINEAR
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    GLint mode =GL_NEAREST;GL_LINEAR;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mode);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mode);
 
     //U
     glGenTextures(1, &m_idu);
     glBindTexture(GL_TEXTURE_2D, m_idu);
     //放大过滤，线性插值
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mode);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mode);
 
     //V
     glGenTextures(1, &m_idv);
     glBindTexture(GL_TEXTURE_2D, m_idv);
     //放大过滤，线性插值
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mode);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mode);
 
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -156,7 +163,7 @@ void I420Render::resizeGL(int w, int h)
 
 void I420Render::paintGL()
 {
-    static QTime tp = QTime::currentTime();
+    static QTime tp ;//= QTime::currentTime();
 
     if(ptr ==NULL) return;
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);

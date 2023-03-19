@@ -60,7 +60,7 @@ protected:
 
 signals:
     void sendQImage(const QImage &img);
-
+    void sendQImage(const IMG &img);
 private:
     AVFormatContext *fmtCtx       =NULL;
     const AVCodec         *videoCodec   =NULL;
@@ -70,6 +70,8 @@ private:
     AVFrame         *rgbFrame     = NULL;
     AVFrame         *nv12Frame    = NULL;
     AVStream        *videoStream  = NULL;
+
+    int videowidth=0,videoheight=0;
 
     uchar *out_buffer;
     struct SwsContext *img_ctx=NULL;
@@ -100,7 +102,7 @@ protected:
 
 signals:
     void sendQImage(const IMG &img);
-
+    void sendQImage(const QImage &img);
 private:
 
     uchar *out_buffer;
@@ -131,16 +133,13 @@ protected:
     void paintEvent(QPaintEvent *);
 
 private slots:
-    void receiveQImage(const IMG &rImg);
-
+    void  receiveQImage(const IMG &rImg);
+    void  receiveQImage(const QImage &rImg);
 private:
     FFmpegVideo *ffmpeg;
     PlayVideo   *playf;
 
     QImage img;
-
-
-
 };
 
 #endif // FFMPEGVIDEO_H
