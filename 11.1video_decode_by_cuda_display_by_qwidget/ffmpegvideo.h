@@ -28,6 +28,7 @@ extern "C"{
 #include <libswscale/swscale.h>
 #include <libavformat/avformat.h>
 #include <libavutil/time.h>
+#include <libavcodec/packet.h>
 }
 
 using namespace std;
