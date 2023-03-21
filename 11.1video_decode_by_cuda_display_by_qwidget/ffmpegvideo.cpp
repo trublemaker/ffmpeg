@@ -29,6 +29,9 @@ SDL_Renderer*   renderer;
 SDL_Texture *   texture;
 SDL_Event       SDLevent;
 
+int g_videowidth=1920/2;
+int g_videoheight=1080/2;
+
 typedef struct DecodeContext{
     AVBufferRef *hw_device_ref;
 }DecodeContext;
@@ -123,7 +126,7 @@ int FFmpegVideo::open_input_file()
     int i;
 
     /* cuda dxva2 d3d11va qsv */
-    type = av_hwdevice_find_type_by_name("dxva2");
+    type = av_hwdevice_find_type_by_name("d3d11va");
 
     if (type == AV_HWDEVICE_TYPE_NONE) {
         qDebug( "Device type %s is not supported.\n", "h264_cuvid");
@@ -187,6 +190,9 @@ int FFmpegVideo::open_input_file()
     videowidth=videoCodecCtx->width;
     videoheight=videoCodecCtx->height;
 
+    g_videoheight = videoCodecCtx->height;
+    g_videowidth  = videoCodecCtx->width ;
+
     if(!useSDL) //
     {
         destFormat = AV_PIX_FMT_RGB32;
@@ -230,45 +236,6 @@ void FFmpegVideo::run()
         open_input_file();
     }
 
-    if(useSDL){
-        if(0){
-            //创建输出窗口
-            win = SDL_CreateWindow("SDL Video Player",
-                SDL_WINDOWPOS_UNDEFINED,
-                SDL_WINDOWPOS_UNDEFINED,
-                1920/2+5, 1080/2+5,
-                SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-        }else{
-           // win = SDL_CreateWindowFrom( (void*)this->windowHandle() );//  (void*)ui->widget->window()->winId());// ->windowHandle());
-        }
-
-        if (!win) {
-            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create window!");
-            //goto __FAIL;
-        }
-
-        //SDL渲染器
-        renderer = SDL_CreateRenderer(win, -1, 0 ); //0 SDL_RENDERER_ACCELERATED
-        if (!renderer) {
-            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create renderer!");
-            //goto __FAIL;
-        }
-
-        //创建显示帧
-        Uint32 pixformat = SDL_PIXELFORMAT_IYUV;
-        texture = SDL_CreateTexture(renderer,
-            pixformat,
-            SDL_TEXTUREACCESS_STREAMING,
-            videowidth,
-            videoheight);
-
-        if (!texture)
-        {
-            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create Texture!");
-            //goto __FAIL;
-        }
-    }
-
     while(av_read_frame(fmtCtx,pkt)>=0){
         if(stopFlag) break;
         if(pkt->stream_index == videoStreamIndex){
@@ -285,8 +252,7 @@ void FFmpegVideo::run()
                     if(yuvFrame->format==videoCodecCtx->pix_fmt){
                         //nv12Frame->format=AV_PIX_FMT_NV12;
                         static bool hwframe_mapok=true;
-
-                        int ret = -1;//av_hwframe_map(nv12Frame,yuvFrame,0); //-22;//
+                        int ret = -1;
 
                         if(hwframe_mapok){
                             ret = av_hwframe_map(nv12Frame,yuvFrame,0);
@@ -295,18 +261,23 @@ void FFmpegVideo::run()
                                     char buf[256]={0};
                                     av_strerror(ret,buf,sizeof(buf)-1);
                                     qCritical()<<"av_hwframe_map error: "<< buf;
+                                    av_frame_unref(nv12Frame);
                             }else{
                                 nv12Frame->height=yuvFrame->height;
                                 nv12Frame->width =yuvFrame->width;
                                 //qDebug()<<"av_hwframe_map ok";
                             }
-
                         }
 
                         if( !hwframe_mapok ){
                             //qDebug()<<"av_hwframe_map failue use av_hwframe_transfer_data";
-                            nv12Frame->format=AV_PIX_FMT_NV12;
+                            //nv12Frame->format=AV_PIX_FMT_NV12;
                             if((ret = av_hwframe_transfer_data(nv12Frame,yuvFrame,0))<0){
+                                //av_frame_unref(nv12Frame);
+                                //av_frame_unref(yuvFrame);
+                                char buf[256]={0};
+                                av_strerror(ret,buf,sizeof(buf)-1);
+                                qCritical()<<"av_hwframe_transfer_data error: "<< buf;
                                 continue;
                             }
                             AVPixelFormat f1 = static_cast<AVPixelFormat>(yuvFrame->format) ;
@@ -421,7 +392,9 @@ void PlayVideo::run()
         sleeptime=390;
     }
 
+
     sendFrame = av_frame_alloc();
+    bool sdl_inited=false;
 
     int64_t times=0;
     while(1){
@@ -429,6 +402,51 @@ void PlayVideo::run()
         if(stopFlag) break;
 
         if(frameTupleList.size()>0){
+
+            if(useSDL){
+                if(!sdl_inited){
+                    sdl_inited=true;
+                if(0){
+                    //创建输出窗口
+                    win = SDL_CreateWindow("SDL Video Player",
+                        SDL_WINDOWPOS_UNDEFINED,
+                        SDL_WINDOWPOS_UNDEFINED,
+                        1920/2+5, 1080/2+5,
+                        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+                }else{
+                   // win = SDL_CreateWindowFrom( (void*)this->windowHandle() );//  (void*)ui->widget->window()->winId());// ->windowHandle());
+                }
+
+                if (!win) {
+                    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create window!");
+                    //goto __FAIL;
+                }
+
+                //SDL渲染器
+                renderer = SDL_CreateRenderer(win, -1, 0 ); //0 SDL_RENDERER_ACCELERATED
+                if (!renderer) {
+                    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create renderer!");
+                    //goto __FAIL;
+                }
+
+                int w,h;
+                SDL_GetWindowSize(win, &w, &h);
+
+                //创建显示帧
+                Uint32 pixformat = SDL_PIXELFORMAT_IYUV;
+                texture = SDL_CreateTexture(renderer,
+                    pixformat,
+                    SDL_TEXTUREACCESS_STREAMING,
+                    g_videowidth,
+                    g_videoheight);
+
+                if (!texture)
+                {
+                    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create Texture!");
+                    //goto __FAIL;
+                }
+            }
+}
 
             tuple<int64_t /*pts*/, uchar*/*buffer*/ > tuple = frameTupleList.front();
 
@@ -558,27 +576,6 @@ FFmpegWidget::FFmpegWidget(QWidget *parent) : QWidget(parent)
     //connect(ffmpeg,SIGNAL(snedQImage(IMG)),this,SLOT(receiveQImage(IMG)),Qt::DirectConnection);
     connect(playf, SIGNAL(sendQImage(IMG)),this,SLOT(receiveQImage(IMG)),Qt::DirectConnection);
     connect(playf, SIGNAL(sendQImage(QImage)),this,SLOT(receiveQImage(QImage)),Qt::DirectConnection);
-
-    if(1)
-    {
-        //_window = SDL_CreateWindow("SDL",SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED,
-        //                          800, 600, SDL_WINDOW_OPENGL);//From((void*)ui->widget->window()->winId());// ->windowHandle());
-        //_pScreens = SDL_GetWindowSurface(_window);
-
-        //pSDLRenderer = SDL_CreateRenderer(_window, -1, 0);
-
-        //_pload = SDL_LoadBMP("C:\\Dev\\vlcsnap.bmp");
-
-         //SDL_BlitSurface(_pload,NULL,_pScreens,NULL);
-        // SDL_UpdateWindowSurface(_window);
-        return;
-    }
-
-    //SDL_Window * window;  //->winId()
-    //window = SDL_CreateWindowFrom( (void*)this->winId() );//  (void*)ui->widget->window()->winId());// ->windowHandle());
-    //SDL_Surface * _pScreens = SDL_GetWindowSurface(window);
-
-   // SDL_LoadBMP("C:\\Dev\\vlcsnap.bmp");
 }
 
 FFmpegWidget::~FFmpegWidget()
