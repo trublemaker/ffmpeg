@@ -126,7 +126,7 @@ int FFmpegVideo::open_input_file()
     int i;
 
     /* cuda dxva2 d3d11va qsv */
-    type = av_hwdevice_find_type_by_name("d3d11va");
+    type = av_hwdevice_find_type_by_name("cuda");
 
     if (type == AV_HWDEVICE_TYPE_NONE) {
         qDebug( "Device type %s is not supported.\n", "h264_cuvid");
@@ -404,49 +404,55 @@ void PlayVideo::run()
         if(frameTupleList.size()>0){
 
             if(useSDL){
-                if(!sdl_inited){
-                    sdl_inited=true;
-                if(0){
-                    //创建输出窗口
-                    win = SDL_CreateWindow("SDL Video Player",
-                        SDL_WINDOWPOS_UNDEFINED,
-                        SDL_WINDOWPOS_UNDEFINED,
-                        1920/2+5, 1080/2+5,
-                        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-                }else{
-                   // win = SDL_CreateWindowFrom( (void*)this->windowHandle() );//  (void*)ui->widget->window()->winId());// ->windowHandle());
-                }
-
-                if (!win) {
-                    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create window!");
-                    //goto __FAIL;
-                }
-
-                //SDL渲染器
-                renderer = SDL_CreateRenderer(win, -1, 0 ); //0 SDL_RENDERER_ACCELERATED
-                if (!renderer) {
-                    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create renderer!");
-                    //goto __FAIL;
-                }
-
-                int w,h;
-                SDL_GetWindowSize(win, &w, &h);
-
-                //创建显示帧
-                Uint32 pixformat = SDL_PIXELFORMAT_IYUV;
-                texture = SDL_CreateTexture(renderer,
-                    pixformat,
-                    SDL_TEXTUREACCESS_STREAMING,
-                    g_videowidth,
-                    g_videoheight);
-
-                if (!texture)
+                if (!sdl_inited)
                 {
-                    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create Texture!");
-                    //goto __FAIL;
+                    sdl_inited = true;
+                    if (0)
+                    {
+                        // 创建输出窗口
+                        win = SDL_CreateWindow("SDL Video Player",
+                                               SDL_WINDOWPOS_UNDEFINED,
+                                               SDL_WINDOWPOS_UNDEFINED,
+                                               1920 / 2 + 5, 1080 / 2 + 5,
+                                               SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+                    }
+                    else
+                    {
+                        // win = SDL_CreateWindowFrom( (void*)this->windowHandle() );//  (void*)ui->widget->window()->winId());// ->windowHandle());
+                    }
+
+                    if (!win)
+                    {
+                        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create window!");
+                        // goto __FAIL;
+                    }
+
+                    // SDL渲染器
+                    renderer = SDL_CreateRenderer(win, -1, 0); // 0 SDL_RENDERER_ACCELERATED
+                    if (!renderer)
+                    {
+                        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create renderer!");
+                        // goto __FAIL;
+                    }
+
+                    int w, h;
+                    SDL_GetWindowSize(win, &w, &h);
+
+                    // 创建显示帧
+                    Uint32 pixformat = SDL_PIXELFORMAT_IYUV;
+                    texture = SDL_CreateTexture(renderer,
+                                                pixformat,
+                                                SDL_TEXTUREACCESS_STREAMING, // SDL_RENDERER_ACCELERATED,//SDL_TEXTUREACCESS_STREAMING,
+                                                g_videowidth,
+                                                g_videoheight);
+
+                    if (!texture)
+                    {
+                        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create Texture!");
+                        // goto __FAIL;
+                    }
                 }
             }
-}
 
             tuple<int64_t /*pts*/, uchar*/*buffer*/ > tuple = frameTupleList.front();
 
@@ -505,7 +511,7 @@ void PlayVideo::run()
             g_mutex.unlock();
 
             if(times%25==0){
-                qDebug("Render sleepms:%2d PlayTime:%5d deltaTime:%2d",sleepms ,totaltimes ,deltatime);
+                //qDebug("Render sleepms:%2d PlayTime:%5d deltaTime:%2d",sleepms ,totaltimes ,deltatime);
             }
             ::Sleep(sleepms);
             //::WaitForSingleObject()
