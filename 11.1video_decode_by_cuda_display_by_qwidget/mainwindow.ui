@@ -30,11 +30,41 @@
     <property name="spacing">
      <number>0</number>
     </property>
+    <item row="2" column="0" colspan="2">
+     <widget class="FFmpegWidget" name="widget" native="true"/>
+    </item>
     <item row="0" column="0">
-     <widget class="QLineEdit" name="lineUrl">
-      <property name="text">
-       <string>http://192.168.7.238:7088/rtp/239.93.0.97:5140</string>
-      </property>
+     <widget class="QComboBox" name="lineUrl">
+      <item>
+       <property name="text">
+        <string extracomment="4K乐享超清">http://192.168.1.26:7088/rtp/239.93.0.43:5140</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string extracomment="4K超高清电影">http://192.168.1.26:7088/rtp/239.93.1.156:5140</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string comment="爱上4K">http://192.168.1.26:7088/rtp/239.93.0.97:5140</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string extracomment="CCTV13HD">http://192.168.1.26:7088/rtp/239.93.0.66:5140</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string extracomment="天翼4k">http://192.168.1.26:7088/rtp/239.93.1.16:5140</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string extracomment="天翼4k-50f">http://192.168.1.26:7088/rtp/239.93.1.194:6000</string>
+       </property>
+      </item>
      </widget>
     </item>
     <item row="0" column="1">
@@ -44,9 +74,6 @@
       </property>
      </widget>
     </item>
-    <item row="1" column="0" colspan="2">
-     <widget class="FFmpegWidget" name="widget" native="true"/>
-    </item>
    </layout>
   </widget>
   <widget class="QMenuBar" name="menubar">
@@ -55,7 +82,7 @@
      <x>0</x>
      <y>0</y>
      <width>800</width>
-     <height>22</height>
+     <height>23</height>
     </rect>
    </property>
   </widget>

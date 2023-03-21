@@ -126,14 +126,14 @@ int FFmpegVideo::open_input_file()
     int i;
 
     /* cuda dxva2 d3d11va qsv */
-    type = av_hwdevice_find_type_by_name("cuda");
+    type = av_hwdevice_find_type_by_name("dxva2");
 
     if (type == AV_HWDEVICE_TYPE_NONE) {
         qDebug( "Device type %s is not supported.\n", "h264_cuvid");
         qDebug( "Available device types:");
         while((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
             qDebug( " %s", av_hwdevice_get_type_name(type));
-        qDebug( "\n");
+        //qDebug( "\n");
         return -1;
     }
 
@@ -392,7 +392,6 @@ void PlayVideo::run()
         sleeptime=390;
     }
 
-
     sendFrame = av_frame_alloc();
     bool sdl_inited=false;
 
@@ -510,8 +509,8 @@ void PlayVideo::run()
             frameTupleList.pop_front();
             g_mutex.unlock();
 
-            if(times%25==0){
-                //qDebug("Render sleepms:%2d PlayTime:%5d deltaTime:%2d",sleepms ,totaltimes ,deltatime);
+            if(times%2500==0){
+                qDebug("Render sleepms:%2d PlayTime:%5d deltaTime:%2d",sleepms ,totaltimes ,deltatime);
             }
             ::Sleep(sleepms);
             //::WaitForSingleObject()
