@@ -25,6 +25,8 @@ private slots:
 
     void on_lineUrl_currentIndexChanged(int index);
 
+    void on_hwType_currentTextChanged(const QString &arg1);
+
 private:
     Ui::MainWindow *ui;
     QLabel *titleLabel=0;

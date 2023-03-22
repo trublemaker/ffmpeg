@@ -56,6 +56,10 @@ public:
 
     void stopThread();
 
+    void setHWType(QString type){
+        hwType = type;
+    }
+
 protected:
     void run();
 
@@ -85,6 +89,7 @@ private:
     int ret =0;
 
     bool initFlag=false,openFlag=false,stopFlag=false;
+    QString hwType="cuda";
 };
 
 
@@ -130,6 +135,12 @@ public:
     void play(QString url);
     void stop();
 
+    void setHWType(QString type){
+        if(ffmpeg){
+            ffmpeg->setHWType(type);
+        }
+    }
+
 protected:
     void paintEvent(QPaintEvent *);
 
@@ -137,8 +148,8 @@ private slots:
     void  receiveQImage(const IMG &rImg);
     void  receiveQImage(const QImage &rImg);
 private:
-    FFmpegVideo *ffmpeg;
-    PlayVideo   *playf;
+    FFmpegVideo *ffmpeg=nullptr;
+    PlayVideo   *playf=nullptr;
 
     QImage img;
 };

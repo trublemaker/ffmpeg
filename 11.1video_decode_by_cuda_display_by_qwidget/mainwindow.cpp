@@ -82,3 +82,9 @@ void MainWindow::on_lineUrl_currentIndexChanged(int index)
         titleLabel->setText(str);
     }
 }
+
+void MainWindow::on_hwType_currentTextChanged(const QString &arg1)
+{
+    ui->widget->setHWType( arg1 );
+}
+
