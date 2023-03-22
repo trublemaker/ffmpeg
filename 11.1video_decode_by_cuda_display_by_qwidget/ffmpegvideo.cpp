@@ -232,6 +232,19 @@ int FFmpegVideo::open_input_file()
 
 void FFmpegVideo::run()
 {
+    double PCFreq = 0.0;
+    LARGE_INTEGER freq;
+
+    LARGE_INTEGER li;
+    if(!QueryPerformanceFrequency(&li)){
+        qDebug() <<"QueryPerformanceFrequency failed!";
+    }
+
+    PCFreq = double(li.QuadPart)/1000.0;
+
+    QueryPerformanceCounter(&li);
+    int64_t CounterStart = li.QuadPart;
+
     if(!openFlag){
         open_input_file();
     }
@@ -251,11 +264,19 @@ void FFmpegVideo::run()
 
                     if(yuvFrame->format==videoCodecCtx->pix_fmt){
                         //nv12Frame->format=AV_PIX_FMT_NV12;
-                        static bool hwframe_mapok=true;
+                        static bool hwframe_mapok=0;
                         int ret = -1;
 
                         if(hwframe_mapok){
+                            QueryPerformanceCounter(&li);
+                            int64_t CounterStart = li.QuadPart;
+
                             ret = av_hwframe_map(nv12Frame,yuvFrame,0);
+
+                            QueryPerformanceCounter(&li);
+                            double times = 1.0*(li.QuadPart-CounterStart)/PCFreq;
+                            qDebug("\033[32mav_hwframe_map Time:%d %.2fms", li.QuadPart-CounterStart, times);
+
                             if(ret<0){
                                     hwframe_mapok=false;
                                     char buf[256]={0};
@@ -272,7 +293,16 @@ void FFmpegVideo::run()
                         if( !hwframe_mapok ){
                             //qDebug()<<"av_hwframe_map failue use av_hwframe_transfer_data";
                             //nv12Frame->format=AV_PIX_FMT_NV12;
-                            if((ret = av_hwframe_transfer_data(nv12Frame,yuvFrame,0))<0){
+                            QueryPerformanceCounter(&li);
+                            int64_t CounterStart = li.QuadPart;
+
+                            ret = av_hwframe_transfer_data(nv12Frame,yuvFrame,0);
+
+                            QueryPerformanceCounter(&li);
+                            double times = 1.0*(li.QuadPart-CounterStart)/PCFreq;
+                            qDebug("\033[32mav_hwframe_transfer_data Time:%d %.2fms", li.QuadPart-CounterStart, times);
+
+                            if((ret)<0){
                                 //av_frame_unref(nv12Frame);
                                 //av_frame_unref(yuvFrame);
                                 char buf[256]={0};
@@ -365,6 +395,7 @@ void FFmpegVideo::run()
 
 void PlayVideo::run()
 {
+    int frametime=40;//ms
     double PCFreq = 0.0;
     LARGE_INTEGER freq;
 
@@ -395,13 +426,16 @@ void PlayVideo::run()
     sendFrame = av_frame_alloc();
     bool sdl_inited=false;
 
-    int64_t times=0;
+    int64_t count=0;
+
+    QueryPerformanceCounter(&li);
+    CounterStart = 0;//li.QuadPart;
+
     while(1){
 
         if(stopFlag) break;
 
         if(frameTupleList.size()>0){
-
             if(useSDL){
                 if (!sdl_inited)
                 {
@@ -453,6 +487,7 @@ void PlayVideo::run()
                 }
             }
 
+
             tuple<int64_t /*pts*/, uchar*/*buffer*/ > tuple = frameTupleList.front();
 
             int64_t pts = get<0>(tuple);
@@ -480,44 +515,51 @@ void PlayVideo::run()
             rect.w = w;
             rect.h = h;
 
-            QueryPerformanceCounter(&li);
+            //QueryPerformanceCounter(&li);
             //CounterStart=li.QuadPart;
-
             //qDebug()<< "Render " <<QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*") << (CounterStart-lipre)/PCFreq << pts-pts_pre ;
 
             SDL_RenderClear(renderer);
             SDL_RenderCopy(renderer, texture, NULL, &rect);
             SDL_RenderPresent(renderer);
-            SDL_Delay(0);
+            //SDL_Delay(0);
             //av_packet_unref(&packet);
+
             SDL_PollEvent(&SDLevent);
 
             av_free(buf);
             pts_pre=pts;
 
             QueryPerformanceCounter(&li);
+            if(CounterStart==0){
+                CounterStart = li.QuadPart;
+            }
+            int64_t totaltimes = 1.0*(li.QuadPart-CounterStart)/PCFreq;
+
+            //QueryPerformanceCounter(&li);
             //CounterStart=li.QuadPart;
 
-            int64_t totaltimes = (li.QuadPart-CounterStart)/PCFreq;
-
-            int deltatime = totaltimes %40;
-            int sleepms = 40.0 -  deltatime;
-            if(sleepms<0)sleepms=5;
-            else if(sleepms>40) sleepms=40;
+            int deltatime = totaltimes %frametime;
+            int sleepms = 1.0*frametime -  deltatime;
+            if(sleepms<0)sleepms=frametime/3;
+            else if(sleepms>frametime) sleepms=frametime;
 
             g_mutex.lock();
             frameTupleList.pop_front();
             g_mutex.unlock();
 
-            if(times%2500==0){
-                qDebug("Render sleepms:%2d PlayTime:%5d deltaTime:%2d",sleepms ,totaltimes ,deltatime);
-            }
             ::Sleep(sleepms);
             //::WaitForSingleObject()
             //QueryPerformanceCounter(&li);
             lipre = CounterStart;
 
-            times ++;
+            if(count%2500==0)
+            {
+                qDebug("Render sleepms:%2d %3d PlayTime:%3d:%02d:%02d.%03d (%5d) deltaTime:%2d",sleepms ,count,
+                       totaltimes/60/60/1000, totaltimes/60/1000%60, totaltimes/1000%60, totaltimes%1000,totaltimes,
+                       deltatime);
+            }
+            count ++;
         }
 
         if(Images.size()>0){
