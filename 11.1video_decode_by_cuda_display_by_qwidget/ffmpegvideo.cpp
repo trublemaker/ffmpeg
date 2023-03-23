@@ -32,12 +32,6 @@ SDL_Event       SDLevent;
 int g_videowidth=1920/2;
 int g_videoheight=1080/2;
 
-typedef struct DecodeContext{
-    AVBufferRef *hw_device_ref;
-}DecodeContext;
-
-DecodeContext decode = {NULL};
-
 static enum AVPixelFormat hw_pix_fmt;
 static AVBufferRef* hw_device_ctx=NULL;
 
@@ -76,7 +70,6 @@ void FFmpegVideo::ffmpeg_free_variables()
     if(!fmtCtx) avformat_close_input(&fmtCtx);
 }
 
-
 AVPixelFormat FFmpegVideo::get_hw_format(AVCodecContext *ctx, const AVPixelFormat *pix_fmts)
 {
     Q_UNUSED(ctx)
@@ -96,7 +89,6 @@ AVPixelFormat FFmpegVideo::get_hw_format(AVCodecContext *ctx, const AVPixelForma
     qDebug( "Failed to get HW surface format.\n");
     return AV_PIX_FMT_NONE;
 }
-
 int FFmpegVideo::hw_decoder_init(AVCodecContext *ctx, const AVHWDeviceType type)
 {
     int err = 0;
@@ -129,7 +121,6 @@ int FFmpegVideo::open_input_file()
     int i = 0;
 
     /* cuda dxva2 d3d11va qsv */
-
     type = av_hwdevice_find_type_by_name(hwType.toLocal8Bit().data());
 
     if (type == AV_HWDEVICE_TYPE_NONE) {
@@ -158,6 +149,16 @@ int FFmpegVideo::open_input_file()
         return -1;
     }
     videoStreamIndex = ret;
+
+    //find the audio stream information
+    ret = av_find_best_stream(fmtCtx, AVMEDIA_TYPE_AUDIO, -1, -1, &audioCodec, 0);
+    if (ret < 0) {
+        qDebug( "Cannot find a audio stream in the input file\n");
+        return -1;
+    }else{
+        fprintf(stderr, "find audio stream index: %d", ret);
+    }
+    audioStreamIndex = ret;
 
     //获取支持该decoder的hw配置型
     for (i = 0;; i++) {
@@ -296,7 +297,7 @@ void FFmpegVideo::run()
                                     char buf[256]={0};
                                     av_strerror(ret,buf,sizeof(buf)-1);
                                     qCritical()<<"av_hwframe_map error: "<< buf;
-                                    av_frame_unref(nv12Frame);
+                                    //av_frame_unref(nv12Frame);
                             }else{
                                 nv12Frame->height=yuvFrame->height;
                                 nv12Frame->width =yuvFrame->width;
@@ -326,6 +327,12 @@ void FFmpegVideo::run()
                             #endif
 
                             #ifdef QT_DEBUG
+                            AVPixelFormat f1 = static_cast<AVPixelFormat>(yuvFrame->format) ;
+                            AVPixelFormat f2 = static_cast<AVPixelFormat>(nv12Frame->format);
+                            AVPixelFormat f3 = AV_PIX_FMT_YUV420P;
+                            AVPixelFormat f4 = AV_PIX_FMT_NV12;
+                            f4=f4;
+
                             if((ret)<0){
                                 //av_frame_unref(nv12Frame);
                                 //av_frame_unref(yuvFrame);
@@ -334,11 +341,6 @@ void FFmpegVideo::run()
                                 qCritical()<<"av_hwframe_transfer_data error: "<< buf;
                                 continue;
                             }
-                            AVPixelFormat f1 = static_cast<AVPixelFormat>(yuvFrame->format) ;
-                            AVPixelFormat f2 = static_cast<AVPixelFormat>(nv12Frame->format);
-                            AVPixelFormat f3 = AV_PIX_FMT_YUV420P;
-                            AVPixelFormat f4 = AV_PIX_FMT_NV12;
-                            f4=f4;
                             #endif
                         }
                     }
@@ -424,6 +426,12 @@ void FFmpegVideo::run()
                 }
             }
             av_packet_unref(pkt);
+        }
+        else if(pkt->stream_index == audioStreamIndex){
+            qDebug()<<"audioStream";
+        }
+        else{
+            qDebug()<<"otherStream";
         }
     }
 

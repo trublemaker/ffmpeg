@@ -55,13 +55,13 @@ public:
     int open_input_file();
     static enum AVPixelFormat get_hw_format(AVCodecContext *ctx,
                                             const enum AVPixelFormat *pix_fmts);
-    static int hw_decoder_init(AVCodecContext *ctx, const enum AVHWDeviceType type);
 
     void stopThread();
 
     void setHWType(QString type){
         hwType = type;
     }
+    int hw_decoder_init(AVCodecContext *ctx, const AVHWDeviceType type);
 
 protected:
     void run();
@@ -71,7 +71,8 @@ signals:
     void sendQImage(const IMG &img);
 private:
     AVFormatContext *fmtCtx       =NULL;
-    const AVCodec         *videoCodec   =NULL;
+    const AVCodec   *videoCodec   =NULL;
+    const AVCodec   *audioCodec   = nullptr;
     AVCodecContext  *videoCodecCtx=NULL;
     AVPacket        *pkt          = NULL;
     AVFrame         *yuvFrame     = NULL;
@@ -87,6 +88,7 @@ private:
     QString _filePath;
 
     int videoStreamIndex =-1;
+    int audioStreamIndex =-1;
     int numBytes = -1;
 
     int ret =0;
@@ -94,7 +96,6 @@ private:
     bool initFlag=false,openFlag=false,stopFlag=false;
     QString hwType="cuda";
 };
-
 
 
 class PlayVideo : public QThread
@@ -124,6 +125,8 @@ private:
     QString _filePath;
 
     int videoStreamIndex =-1;
+    int audioStreamIndex =-1;
+    
     int numBytes = -1;
 
     int ret =0;
