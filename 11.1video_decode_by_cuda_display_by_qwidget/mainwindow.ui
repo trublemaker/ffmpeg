@@ -15,18 +15,30 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout">
-    <item row="5" column="0" colspan="4">
-     <widget class="FFmpegWidget" name="widget" native="true"/>
-    </item>
     <item row="0" column="3">
-     <widget class="QPushButton" name="btnPS">
+     <widget class="QCheckBox" name="chkSDL">
+      <property name="maximumSize">
+       <size>
+        <width>56</width>
+        <height>16777215</height>
+       </size>
+      </property>
       <property name="text">
-       <string>Play</string>
+       <string>SDL</string>
+      </property>
+      <property name="checked">
+       <bool>true</bool>
       </property>
      </widget>
     </item>
-    <item row="0" column="2">
+    <item row="0" column="4">
      <widget class="QComboBox" name="hwType">
+      <property name="maximumSize">
+       <size>
+        <width>64</width>
+        <height>16777215</height>
+       </size>
+      </property>
       <item>
        <property name="text">
         <string>cuda</string>
@@ -51,36 +63,74 @@
     </item>
     <item row="0" column="1">
      <widget class="QComboBox" name="lineUrl">
+      <property name="maximumSize">
+       <size>
+        <width>460</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <property name="editable">
+       <bool>true</bool>
+      </property>
       <item>
        <property name="text">
-        <string extracomment="4K乐享超清">http://192.168.7.238:7088/rtp/239.93.0.43:5140</string>
+        <string extracomment="4K乐享超清">http://192.168.1.26:7088/rtp/239.93.0.43:5140</string>
        </property>
       </item>
       <item>
        <property name="text">
-        <string extracomment="4K超高清电影">http://192.168.7.238:7088/rtp/239.93.1.156:5140</string>
+        <string extracomment="4K超高清电影">http://192.168.1.26:7088/rtp/239.93.1.156:5140</string>
        </property>
       </item>
       <item>
        <property name="text">
-        <string comment="爱上4K">http://192.168.7.238:7088/rtp/239.93.0.97:5140</string>
+        <string comment="爱上4K">http://192.168.1.26:7088/rtp/239.93.0.97:5140</string>
        </property>
       </item>
       <item>
        <property name="text">
-        <string extracomment="CCTV13HD">http://192.168.7.238:7088/rtp/239.93.0.66:5140</string>
+        <string extracomment="CCTV13HD">http://192.168.1.26:7088/rtp/239.93.0.66:5140</string>
        </property>
       </item>
       <item>
        <property name="text">
-        <string extracomment="天翼4k">http://192.168.7.238:7088/rtp/239.93.1.16:5140</string>
+        <string extracomment="天翼4k">http://192.168.1.26:7088/rtp/239.93.1.16:5140</string>
        </property>
       </item>
       <item>
        <property name="text">
-        <string extracomment="天翼4k-50f">http://192.168.7.238:7088/rtp/239.93.1.194:6000</string>
+        <string extracomment="天翼4k-50f">http://192.168.1.26:7088/rtp/239.93.1.194:6000</string>
        </property>
       </item>
+     </widget>
+    </item>
+    <item row="5" column="0" colspan="6">
+     <widget class="FFmpegWidget" name="widget" native="true"/>
+    </item>
+    <item row="0" column="5">
+     <widget class="QPushButton" name="btnPS">
+      <property name="maximumSize">
+       <size>
+        <width>64</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <property name="text">
+       <string>Play</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="2">
+     <widget class="QLineEdit" name="edtServer">
+      <property name="maximumSize">
+       <size>
+        <width>140</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <property name="text">
+       <string>192.168.1.26</string>
+      </property>
      </widget>
     </item>
    </layout>

@@ -22,7 +22,7 @@ int useSDL = 1;
 AVPixelFormat destFormat = AV_PIX_FMT_YUV420P;//SDL
 AVFrame * sendFrame;
 
-SDL_Window  *   win;
+SDL_Window  *   win=nullptr;
 SDL_Surface *   _pScreens ;
 SDL_Surface *   _pload ;
 SDL_Renderer*   renderer;
@@ -44,9 +44,6 @@ static AVBufferRef* hw_device_ctx=NULL;
 FFmpegVideo::FFmpegVideo()
 {
 }
-
-FFmpegVideo::~FFmpegVideo()
-{}
 
 void FFmpegVideo::setPath(QString url)
 {
@@ -85,9 +82,15 @@ AVPixelFormat FFmpegVideo::get_hw_format(AVCodecContext *ctx, const AVPixelForma
     Q_UNUSED(ctx)
     const enum AVPixelFormat *p;
 
+    //pix_fmts to string
+    qDebug( )<<"opened hw format:" << av_get_pix_fmt_name( hw_pix_fmt ) ;
+
     for (p = pix_fmts; *p != -1; p++) {
-        if (*p == hw_pix_fmt)
+         qDebug( )<< "Compare:" << av_get_pix_fmt_name( *p ) ;
+        if (*p == hw_pix_fmt){
+            qDebug("Find hw format: %s ", av_get_pix_fmt_name(*p));
             return *p;
+            }
     }
 
     qDebug( "Failed to get HW surface format.\n");
@@ -368,6 +371,9 @@ void FFmpegVideo::run()
                         char buf[256]={0};
                         av_strerror(ret,buf,sizeof(buf)-1);
                         qCritical()<<"sws_scale error: "<< buf;
+                        av_frame_unref(nv12Frame);
+                        av_frame_unref(yuvFrame);
+                        continue;
                     }
 
                     //*/
@@ -420,7 +426,20 @@ void FFmpegVideo::run()
             av_packet_unref(pkt);
         }
     }
-    qDebug()<<"Thread stop now";
+
+    //av_hwdevice_ctx_free(&hw_device_ctx);
+    av_frame_free(&yuvFrame);
+    av_frame_free(&nv12Frame);
+    av_frame_free(&rgbFrame);
+    //av_frame_free(&sendFrame);
+    av_packet_free(&pkt);
+    avcodec_free_context(&videoCodecCtx);
+    //av_close_input_file(pFormatCtx);
+    //avformat_free_context(pFormatCtx);
+    sws_freeContext(img_ctx);
+    av_freep(&out_buffer);
+    
+    qDebug()<<"Thread stop now " << __FUNCTION__ ;
 }
 
 
@@ -462,10 +481,7 @@ void PlayVideo::run()
     QueryPerformanceCounter(&li);
     CounterStart = 0;//li.QuadPart;
 
-    while(1){
-
-        if(stopFlag) break;
-
+    while(!stopFlag){
         if(frameTupleList.size()>0){
             if(useSDL){
                 if (!sdl_inited)
@@ -584,7 +600,8 @@ void PlayVideo::run()
             //QueryPerformanceCounter(&li);
             lipre = CounterStart;
 
-            if(count%25==0)
+#define LOGCOUNT 25000
+            if( count % LOGCOUNT ==(LOGCOUNT-1) )
             {
                 qDebug("\033[35mRender sleepms:%2d %3d PlayTime:%3d:%02d:%02d.%03d (%5d) deltaTime:%2d",sleepms ,count,
                        totaltimes/60/60/1000, totaltimes/60/1000%60, totaltimes/1000%60, totaltimes%1000,totaltimes,
@@ -592,8 +609,7 @@ void PlayVideo::run()
             }
             count ++;
         }
-
-        if(Images.size()>0){
+        else if(Images.size()>0){
             IMG img = Images.front();
             Images.pop_front();
 
@@ -626,20 +642,22 @@ void PlayVideo::run()
             //delete img.img;
         }
         else{
-
+            //NSSleep(sleeptime);
+            //qDebug()<<"PlayVideo Thread sleep";
+            QThread::msleep(5);
+            //av_usleep(sleeptime*1000);
+            //::Sleep(sleeptime);
         }
-
-        //NSSleep(sleeptime);
-        //QThread::usleep(sleeptime*1000);
-        //QThread::msleep(sleeptime);
-        //av_usleep(sleeptime*1000);
-        //::Sleep(sleeptime);
-
     }
 
+    if(useSDL){
+        if(win) SDL_DestroyWindow(win);
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyTexture(texture);
+    }
     rx = timeEndPeriod(1);
 
-    qDebug()<<"PlayVideo Thread end now";
+    qDebug()<<"PlayVideo Thread end now" << __FUNCTION__ ;
 }
 
 
@@ -683,10 +701,21 @@ void FFmpegWidget::play(QString url)
 void FFmpegWidget::stop()
 {
     if(ffmpeg->isRunning()){
+        ffmpeg->stopThread();
+        playf->stopThread();
+        QThread::msleep(20);
         ffmpeg->requestInterruption();
         ffmpeg->quit();
-        ffmpeg->wait(100);
+        ffmpeg->wait(200);
     }
+
+    if(playf->isRunning()){
+        QThread::msleep(50);
+        playf->requestInterruption();
+        playf->quit();
+        playf->wait(200);
+    }
+
     ffmpeg->ffmpeg_free_variables();
 }
 

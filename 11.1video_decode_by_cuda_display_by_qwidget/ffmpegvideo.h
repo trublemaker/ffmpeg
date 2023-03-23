@@ -43,7 +43,10 @@ class FFmpegVideo : public QThread
     Q_OBJECT
 public:
     explicit FFmpegVideo();
-    ~FFmpegVideo();
+    ~FFmpegVideo()
+    {
+        stopFlag=true;
+    }
 
     void setPath(QString url);
 
@@ -99,9 +102,13 @@ class PlayVideo : public QThread
     Q_OBJECT
 public:
     explicit PlayVideo(){};
-    ~PlayVideo(){};
+    ~PlayVideo(){
+        stopFlag = true;
+    };
 
-    void stopThread(){};
+    void stopThread(){
+        stopFlag=true;
+    };
 
 protected:
     void run();
