@@ -80,8 +80,8 @@ AVPixelFormat FFmpegVideo::get_hw_format(AVCodecContext *ctx, const AVPixelForma
 
     for (p = pix_fmts; *p != -1; p++) {
          qDebug( )<< "Compare:" << av_get_pix_fmt_name( *p ) ;
-        if (*p == hw_pix_fmt){
-            qDebug("Find hw format: %s ", av_get_pix_fmt_name(*p));
+        if (*p == hw_pix_fmt ){
+            qDebug("use hw format: %s[%s]", av_get_pix_fmt_name(*p),av_get_pix_fmt_name( hw_pix_fmt ) );
             return *p;
             }
     }
@@ -120,7 +120,7 @@ int FFmpegVideo::open_input_file()
     enum AVHWDeviceType type;
     int i = 0;
 
-    /* cuda dxva2 d3d11va qsv */
+    /* cuda dxva2 d3d11va qsv h264_qsv*/
     type = av_hwdevice_find_type_by_name(hwType.toLocal8Bit().data());
 
     if (type == AV_HWDEVICE_TYPE_NONE) {
@@ -133,6 +133,7 @@ int FFmpegVideo::open_input_file()
     }
 
     /* open the input file */
+    fprintf(stderr,"open %s.\n",_filePath.toLocal8Bit().data());
     if (avformat_open_input(&fmtCtx, _filePath.toLocal8Bit().data(), NULL, NULL) != 0) {
         return -1;
     }
@@ -171,6 +172,7 @@ int FFmpegVideo::open_input_file()
         if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
                 config->device_type == type) {
             hw_pix_fmt = config->pix_fmt;
+
             break;
         }
     }
@@ -213,7 +215,7 @@ int FFmpegVideo::open_input_file()
                              videoCodecCtx->width,
                              videoCodecCtx->height,
                              destFormat,//AV_PIX_FMT_RGB32, AV_PIX_FMT_NV12 AV_PIX_FMT_YUV420P
-                             SWS_BICUBIC,//SWS_BICUBIC, SWS_BILINEAR
+                             SWS_BICUBIC, //SWS_BICUBIC, SWS_BILINEAR SWS_FAST_BILINEAR
                              NULL,NULL,NULL);
 
     sendFrame->width =videoCodecCtx->width;
@@ -332,22 +334,28 @@ void FFmpegVideo::run()
                             AVPixelFormat f3 = AV_PIX_FMT_YUV420P;
                             AVPixelFormat f4 = AV_PIX_FMT_NV12;
                             f4=f4;
+                            #endif
 
                             if((ret)<0){
+                                static bool outflag=false;
                                 //av_frame_unref(nv12Frame);
                                 //av_frame_unref(yuvFrame);
-                                char buf[256]={0};
-                                av_strerror(ret,buf,sizeof(buf)-1);
-                                qCritical()<<"av_hwframe_transfer_data error: "<< buf;
-                                continue;
+                                if(!outflag){
+                                    char buf[256]={0};
+                                    av_strerror(ret,buf,sizeof(buf)-1);
+                                    qCritical()<<"av_hwframe_transfer_data error: "<< buf << nv12Frame->format;
+                                    outflag=true;
+                                }
+                                if(nv12Frame->format==AV_PIX_FMT_NONE)
+                                    continue;
                             }
-                            #endif
                         }
                     }
 
                     if(nv12Frame->format!=AV_PIX_FMT_NV12){
                         static bool changed = false; //AV_PIX_FMT_P010LE
                         if(!changed ){
+                            qDebug()<<"Format:"<< nv12Frame->format;
                             qDebug()<<"change src format from " <<  av_get_pix_fmt_name((AVPixelFormat)(AV_PIX_FMT_NV12)) <<"to" <<  av_get_pix_fmt_name((AVPixelFormat)nv12Frame->format);
                             AVPixelFormat src_fmt = AV_PIX_FMT_P010LE;//videoCodecCtx->pix_fmt;AV_PIX_FMT_NV12;
                             img_ctx = sws_getContext(videoCodecCtx->width,
@@ -356,7 +364,7 @@ void FFmpegVideo::run()
                                                      videoCodecCtx->width,
                                                      videoCodecCtx->height,
                                                      destFormat,//AV_PIX_FMT_RGB32, AV_PIX_FMT_NV12 AV_PIX_FMT_YUV420P
-                                                     SWS_BICUBIC,//SWS_BICUBIC, SWS_BILINEAR
+                                                     SWS_FAST_BILINEAR,//SWS_BICUBIC, SWS_BILINEAR
                                                      NULL,NULL,NULL);
                             changed = true;
                         }
@@ -428,10 +436,13 @@ void FFmpegVideo::run()
             av_packet_unref(pkt);
         }
         else if(pkt->stream_index == audioStreamIndex){
-            qDebug()<<"audioStream";
+            //qDebug()<<"audioStream";
         }
         else{
-            qDebug()<<"otherStream";
+            int index = pkt->stream_index;
+            index ++;
+            //????
+            //qDebug()<<"otherStream"<<pkt->stream_index;
         }
     }
 
