@@ -2,6 +2,8 @@
 #include "ui_mainwindow.h"
 #include <SDL.h>
 
+#include <QComboBox>
+
 extern SDL_Window * win;
 extern int useSDL;
 MainWindow::MainWindow(QWidget *parent)
@@ -77,6 +79,10 @@ void MainWindow::on_lineUrl_currentIndexChanged(int index)
         //获取qcombobox的注释
         QString str = ui->lineUrl->itemData(index).toString();
 
+        QVariant var = ui->lineUrl->itemData(index) ;
+
+        //ui->lineUrl-
+
         //获取qcombobox的值
         //QString str = ui->lineUrl->itemText(index);
         titleLabel->setText(str);
@@ -86,5 +92,11 @@ void MainWindow::on_lineUrl_currentIndexChanged(int index)
 void MainWindow::on_hwType_currentTextChanged(const QString &arg1)
 {
     ui->widget->setHWType( arg1 );
+}
+
+
+void MainWindow::on_drawHWType_currentIndexChanged(int index)
+{
+    ui->widget->setOutputAccelsType(index);
 }
 

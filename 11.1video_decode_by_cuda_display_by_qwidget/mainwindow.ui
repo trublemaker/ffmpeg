@@ -13,6 +13,10 @@
   <property name="windowTitle">
    <string>MainWindow</string>
   </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>9042709_media_video_list_icon.png</normaloff>9042709_media_video_list_icon.png</iconset>
+  </property>
   <widget class="QWidget" name="centralwidget">
    <property name="sizePolicy">
     <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
@@ -24,7 +28,7 @@
     <enum>Qt::LeftToRight</enum>
    </property>
    <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="6">
+    <item row="0" column="8">
      <widget class="QPushButton" name="btnPS">
       <property name="maximumSize">
        <size>
@@ -50,8 +54,8 @@
       </property>
      </widget>
     </item>
-    <item row="0" column="5">
-     <widget class="QComboBox" name="hwType">
+    <item row="0" column="6">
+     <widget class="QComboBox" name="drawHWType">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
         <horstretch>0</horstretch>
@@ -64,46 +68,35 @@
         <height>16777215</height>
        </size>
       </property>
+      <property name="currentText">
+       <string>D3D11</string>
+      </property>
       <item>
        <property name="text">
-        <string>cuda</string>
+        <string>D3D</string>
        </property>
       </item>
       <item>
        <property name="text">
-        <string>dxva2</string>
+        <string>D3D11</string>
        </property>
       </item>
       <item>
        <property name="text">
-        <string>d3d11va</string>
+        <string>openGL</string>
        </property>
       </item>
       <item>
        <property name="text">
-        <string>qsv</string>
+        <string>openGLES2</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Software</string>
        </property>
       </item>
      </widget>
-    </item>
-    <item row="0" column="4">
-     <widget class="QCheckBox" name="chkSDL">
-      <property name="maximumSize">
-       <size>
-        <width>56</width>
-        <height>16777215</height>
-       </size>
-      </property>
-      <property name="text">
-       <string>SDL</string>
-      </property>
-      <property name="checked">
-       <bool>true</bool>
-      </property>
-     </widget>
-    </item>
-    <item row="5" column="0" colspan="7">
-     <widget class="FFmpegWidget" name="widget" native="true"/>
     </item>
     <item row="0" column="1">
      <widget class="QComboBox" name="lineUrl">
@@ -147,6 +140,61 @@
       <item>
        <property name="text">
         <string extracomment="天翼4k-50f">http://192.168.7.237:7088/rtp/239.93.1.194:6000</string>
+       </property>
+      </item>
+     </widget>
+    </item>
+    <item row="5" column="0" colspan="9">
+     <widget class="FFmpegWidget" name="widget" native="true"/>
+    </item>
+    <item row="0" column="4">
+     <widget class="QCheckBox" name="chkSDL">
+      <property name="maximumSize">
+       <size>
+        <width>56</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <property name="text">
+       <string>SDL</string>
+      </property>
+      <property name="checked">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="5">
+     <widget class="QComboBox" name="hwType">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>80</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <item>
+       <property name="text">
+        <string>cuda</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>dxva2</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>d3d11va</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>qsv</string>
        </property>
       </item>
      </widget>

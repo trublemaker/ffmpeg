@@ -61,6 +61,7 @@ public:
     void setHWType(QString type){
         hwType = type;
     }
+
     int hw_decoder_init(AVCodecContext *ctx, const AVHWDeviceType type);
 
 protected:
@@ -111,6 +112,9 @@ public:
         stopFlag=true;
     };
 
+    void setAccType(int type){
+        accelsType=type;
+    }
 protected:
     void run();
 
@@ -132,6 +136,7 @@ private:
     int ret =0;
 
     bool initFlag=false,openFlag=false,stopFlag=false;
+    int accelsType=1;
 };
 
 
@@ -148,6 +153,12 @@ public:
     void setHWType(QString type){
         if(ffmpeg){
             ffmpeg->setHWType(type);
+        }
+    }
+
+    void setOutputAccelsType(int type){
+        if(playf){
+            playf->setAccType(type);
         }
     }
 

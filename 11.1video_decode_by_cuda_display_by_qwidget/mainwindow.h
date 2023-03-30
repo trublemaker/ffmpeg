@@ -27,6 +27,8 @@ private slots:
 
     void on_hwType_currentTextChanged(const QString &arg1);
 
+    void on_drawHWType_currentIndexChanged(int index);
+
 private:
     Ui::MainWindow *ui;
     QLabel *titleLabel=0;

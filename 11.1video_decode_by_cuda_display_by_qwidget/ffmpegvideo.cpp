@@ -16,24 +16,25 @@ using std::tuple;
 
 list<IMG> Images;
 
-list<tuple<int64_t /*pts*/, uchar*/*buffer*/ >> frameTupleList;
+list<tuple<int64_t /*pts*/, uchar * /*buffer*/>> frameTupleList;
 
 int useSDL = 1;
-AVPixelFormat destFormat = AV_PIX_FMT_YUV420P;//SDL
-AVFrame * sendFrame;
+AVPixelFormat destFormat = AV_PIX_FMT_YUV420P; // SDL
+AVFrame *sendFrame;
 
-SDL_Window  *   win=nullptr;
-SDL_Surface *   _pScreens ;
-SDL_Surface *   _pload ;
-SDL_Renderer*   renderer;
-SDL_Texture *   texture;
-SDL_Event       SDLevent;
+SDL_Window *win = nullptr;
+SDL_Surface *_pScreens;
+SDL_Surface *_pload;
+SDL_Renderer *renderer;
+SDL_Texture *texture;
+SDL_Event SDLevent;
 
-int g_videowidth=1920/2;
-int g_videoheight=1080/2;
+int g_videowidth = 1920 / 2;
+int g_videoheight = 1080 / 2;
 
 static enum AVPixelFormat hw_pix_fmt;
-static AVBufferRef* hw_device_ctx=NULL;
+static AVBufferRef *hw_device_ctx = NULL;
+static int linesize  = 1080 ;
 
 FFmpegVideo::FFmpegVideo()
 {
@@ -41,7 +42,7 @@ FFmpegVideo::FFmpegVideo()
 
 void FFmpegVideo::setPath(QString url)
 {
-    _filePath=url;
+    _filePath = url;
 }
 
 void FFmpegVideo::ffmpeg_init_variables()
@@ -56,18 +57,25 @@ void FFmpegVideo::ffmpeg_init_variables()
 
     sendFrame = av_frame_alloc();
 
-    initFlag=true;
+    initFlag = true;
 }
 
 void FFmpegVideo::ffmpeg_free_variables()
 {
-    if(!pkt) av_packet_free(&pkt);
-    if(!yuvFrame) av_frame_free(&yuvFrame);
-    if(!rgbFrame) av_frame_free(&rgbFrame);
-    if(!nv12Frame) av_frame_free(&nv12Frame);
-    if(!videoCodecCtx) avcodec_free_context(&videoCodecCtx);
-    if(!videoCodecCtx) avcodec_close(videoCodecCtx);
-    if(!fmtCtx) avformat_close_input(&fmtCtx);
+    if (!pkt)
+        av_packet_free(&pkt);
+    if (!yuvFrame)
+        av_frame_free(&yuvFrame);
+    if (!rgbFrame)
+        av_frame_free(&rgbFrame);
+    if (!nv12Frame)
+        av_frame_free(&nv12Frame);
+    if (!videoCodecCtx)
+        avcodec_free_context(&videoCodecCtx);
+    if (!videoCodecCtx)
+        avcodec_close(videoCodecCtx);
+    if (!fmtCtx)
+        avformat_close_input(&fmtCtx);
 }
 
 AVPixelFormat FFmpegVideo::get_hw_format(AVCodecContext *ctx, const AVPixelFormat *pix_fmts)
@@ -75,18 +83,20 @@ AVPixelFormat FFmpegVideo::get_hw_format(AVCodecContext *ctx, const AVPixelForma
     Q_UNUSED(ctx)
     const enum AVPixelFormat *p;
 
-    //pix_fmts to string
-    qDebug( )<<"opened hw format:" << av_get_pix_fmt_name( hw_pix_fmt ) ;
+    // pix_fmts to string
+    qDebug() << "opened hw format:" << av_get_pix_fmt_name(hw_pix_fmt);
 
-    for (p = pix_fmts; *p != -1; p++) {
-         qDebug( )<< "Compare:" << av_get_pix_fmt_name( *p ) ;
-        if (*p == hw_pix_fmt ){
-            qDebug("use hw format: %s[%s]", av_get_pix_fmt_name(*p),av_get_pix_fmt_name( hw_pix_fmt ) );
+    for (p = pix_fmts; *p != -1; p++)
+    {
+        qDebug() << "Compare:" << av_get_pix_fmt_name(*p);
+        if (*p == hw_pix_fmt)
+        {
+            qDebug("use hw format: %s[%s]", av_get_pix_fmt_name(*p), av_get_pix_fmt_name(hw_pix_fmt));
             return *p;
-            }
+        }
     }
 
-    qDebug( "Failed to get HW surface format.\n");
+    qDebug("Failed to get HW surface format.\n");
     return AV_PIX_FMT_NONE;
 }
 int FFmpegVideo::hw_decoder_init(AVCodecContext *ctx, const AVHWDeviceType type)
@@ -94,11 +104,14 @@ int FFmpegVideo::hw_decoder_init(AVCodecContext *ctx, const AVHWDeviceType type)
     int err = 0;
 
     if ((err = av_hwdevice_ctx_create(&hw_device_ctx, type,
-                                      NULL, NULL, 0)) < 0) {
-        qDebug( "Failed to create specified HW device.\n");
+                                      NULL, NULL, 0)) < 0)
+    {
+        qDebug("Failed to create specified HW device.\n");
         return err;
-    }else{
-        qDebug( "Create specified HW device [%s] OK.",av_hwdevice_get_type_name(type));
+    }
+    else
+    {
+        qDebug("Create specified HW device [%s] OK.", av_hwdevice_get_type_name(type));
     }
     ctx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
 
@@ -107,14 +120,15 @@ int FFmpegVideo::hw_decoder_init(AVCodecContext *ctx, const AVHWDeviceType type)
 
 void FFmpegVideo::stopThread()
 {
-    stopFlag=true;
+    stopFlag = true;
 }
 
 int FFmpegVideo::open_input_file()
 {
-    if(!initFlag){
+    if (!initFlag)
+    {
         ffmpeg_init_variables();
-        qDebug()<<"init variables done";
+        qDebug() << "init variables done";
     }
 
     enum AVHWDeviceType type;
@@ -123,54 +137,65 @@ int FFmpegVideo::open_input_file()
     /* cuda dxva2 d3d11va qsv h264_qsv*/
     type = av_hwdevice_find_type_by_name(hwType.toLocal8Bit().data());
 
-    if (type == AV_HWDEVICE_TYPE_NONE) {
-        qDebug( "Device type %s is not supported.\n", "h264_cuvid");
-        qDebug( "Available device types:");
-        while((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
-            qDebug( " %s", av_hwdevice_get_type_name(type));
-        //qDebug( "\n");
+    if (type == AV_HWDEVICE_TYPE_NONE)
+    {
+        qDebug("Device type %s is not supported.\n", "h264_cuvid");
+        qDebug("Available device types:");
+        while ((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
+            qDebug(" %s", av_hwdevice_get_type_name(type));
+        // qDebug( "\n");
         return -1;
     }
 
     /* open the input file */
-    fprintf(stderr,"open %s.\n",_filePath.toLocal8Bit().data());
-    if (avformat_open_input(&fmtCtx, _filePath.toLocal8Bit().data(), NULL, NULL) != 0) {
+    fprintf(stderr, "open %s.\n", _filePath.toLocal8Bit().data());
+    if (avformat_open_input(&fmtCtx, _filePath.toLocal8Bit().data(), NULL, NULL) != 0)
+    {
         return -1;
     }
 
-    if (avformat_find_stream_info(fmtCtx, NULL) < 0) {
-        qDebug( "Cannot find input stream information.\n");
+    if (avformat_find_stream_info(fmtCtx, NULL) < 0)
+    {
+        qDebug("Cannot find input stream information.\n");
         return -1;
     }
 
     /* find the video stream information */
     ret = av_find_best_stream(fmtCtx, AVMEDIA_TYPE_VIDEO, -1, -1, &videoCodec, 0);
-    if (ret < 0) {
-        qDebug( "Cannot find a video stream in the input file\n");
+    if (ret < 0)
+    {
+        qDebug("Cannot find a video stream in the input file\n");
         return -1;
     }
     videoStreamIndex = ret;
 
-    //find the audio stream information
+    // find the audio stream information
     ret = av_find_best_stream(fmtCtx, AVMEDIA_TYPE_AUDIO, -1, -1, &audioCodec, 0);
-    if (ret < 0) {
-        qDebug( "Cannot find a audio stream in the input file\n");
+    if (ret < 0)
+    {
+        qDebug("Cannot find a audio stream in the input file\n");
         return -1;
-    }else{
+    }
+    else
+    {
         fprintf(stderr, "find audio stream index: %d", ret);
     }
     audioStreamIndex = ret;
 
-    //获取支持该decoder的hw配置型
-    for (i = 0;; i++) {
+    // 获取支持该decoder的hw配置型
+    for (i = 0;; i++)
+    {
         const AVCodecHWConfig *config = avcodec_get_hw_config(videoCodec, i);
-        if (!config) {
-            qDebug( "Decoder %s does not support device type %s.\n",
-                    videoCodec->name, av_hwdevice_get_type_name(type));
+        qDebug("hw device pix fmt %s.", av_get_pix_fmt_name(config->pix_fmt));
+        if (!config)
+        {
+            qDebug("Decoder %s does not support device type %s.",
+                   videoCodec->name, av_hwdevice_get_type_name(type));
             return -1;
         }
         if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
-                config->device_type == type) {
+            config->device_type == type)
+        {
             hw_pix_fmt = config->pix_fmt;
 
             break;
@@ -184,64 +209,67 @@ int FFmpegVideo::open_input_file()
     if (avcodec_parameters_to_context(videoCodecCtx, videoStream->codecpar) < 0)
         return -1;
 
-    videoCodecCtx->get_format  = get_hw_format;
+    videoCodecCtx->get_format = get_hw_format;
 
     QThread::msleep(5);
     if (hw_decoder_init(videoCodecCtx, type) < 0)
         return -1;
 
     QThread::msleep(5);
-    if ((ret = avcodec_open2(videoCodecCtx, videoCodec, NULL)) < 0) {
-        qDebug( "Failed to open codec for stream #%u\n", videoStreamIndex);
+    if ((ret = avcodec_open2(videoCodecCtx, videoCodec, NULL)) < 0)
+    {
+        qDebug("Failed to open codec for stream #%u\n", videoStreamIndex);
         return -1;
     }
 
-    videowidth=videoCodecCtx->width;
-    videoheight=videoCodecCtx->height;
+    videowidth = videoCodecCtx->width;
+    videoheight = videoCodecCtx->height;
 
     g_videoheight = videoCodecCtx->height;
-    g_videowidth  = videoCodecCtx->width ;
+    g_videowidth = videoCodecCtx->width;
 
-    if(!useSDL) //
+    if (!useSDL) //
     {
         destFormat = AV_PIX_FMT_RGB32;
     }
 
-    //AV_PIX_FMT_P010LE one 4K
-    AVPixelFormat src_fmt = AV_PIX_FMT_NV12;//AV_PIX_FMT_NV12;//videoCodecCtx->pix_fmt;AV_PIX_FMT_NV12;
+    // AV_PIX_FMT_P010LE one 4K
+    AVPixelFormat src_fmt = AV_PIX_FMT_NV12; // AV_PIX_FMT_NV12;//videoCodecCtx->pix_fmt;AV_PIX_FMT_NV12;
     img_ctx = sws_getContext(videoCodecCtx->width,
                              videoCodecCtx->height,
-                             src_fmt,// AV_PIX_FMT_NV12,//AV_PIX_FMT_NV21//videoCodecCtx->pix_fmt, //AV_PIX_FMT_NV12 ,//  AV_PIX_FMT_NV12,
+                             src_fmt, // AV_PIX_FMT_NV12,//AV_PIX_FMT_NV21//videoCodecCtx->pix_fmt, //AV_PIX_FMT_NV12 ,//  AV_PIX_FMT_NV12,
                              videoCodecCtx->width,
                              videoCodecCtx->height,
-                             destFormat,//AV_PIX_FMT_RGB32, AV_PIX_FMT_NV12 AV_PIX_FMT_YUV420P
-                             SWS_BICUBIC, //SWS_BICUBIC, SWS_BILINEAR SWS_FAST_BILINEAR
-                             NULL,NULL,NULL);
+                             destFormat,  // AV_PIX_FMT_RGB32, AV_PIX_FMT_NV12 AV_PIX_FMT_YUV420P
+                             SWS_BICUBIC, // SWS_BICUBIC, SWS_BILINEAR SWS_FAST_BILINEAR
+                             NULL, NULL, NULL);
 
-    sendFrame->width =videoCodecCtx->width;
-    sendFrame->height=videoCodecCtx->height;
+    sendFrame->width = videoCodecCtx->width;
+    sendFrame->height = videoCodecCtx->height;
 
-    numBytes = av_image_get_buffer_size(destFormat,videoCodecCtx->width,videoCodecCtx->height,1);
-    qDebug()<<"VideoWidth:"<<videoCodecCtx->width<<"VideoHeight:"<<videoCodecCtx->height<<"BufferSize:"<<numBytes;
+    numBytes = av_image_get_buffer_size(destFormat, videoCodecCtx->width, videoCodecCtx->height, 1);
+    qDebug() << "VideoWidth:" << videoCodecCtx->width << "VideoHeight:" << videoCodecCtx->height << "BufferSize:" << numBytes;
 
-    if(videoCodecCtx->width==0 || videoCodecCtx->height==0 || numBytes<=0){
+    if (videoCodecCtx->width == 0 || videoCodecCtx->height == 0 || numBytes <= 0)
+    {
         return -1;
     }
 
-    out_buffer = (unsigned char *)av_malloc(numBytes*sizeof(uchar));
+    out_buffer = (unsigned char *)av_malloc(numBytes * sizeof(uchar));
 
     int res = av_image_fill_arrays(
-                rgbFrame->data,rgbFrame->linesize,
-                out_buffer,
-                destFormat,
-                videoCodecCtx->width,videoCodecCtx->height,1);
+        rgbFrame->data, rgbFrame->linesize,
+        out_buffer,
+        destFormat,
+        videoCodecCtx->width, videoCodecCtx->height, 1);
 
-    if(res<0){
-        qDebug()<<"Fill arrays failed.";
+    if (res < 0)
+    {
+        qDebug() << "Fill arrays failed.";
         return -1;
     }
 
-    openFlag=true;
+    openFlag = true;
     return true;
 }
 
@@ -251,182 +279,213 @@ void FFmpegVideo::run()
     LARGE_INTEGER freq;
 
     LARGE_INTEGER li;
-    if(!QueryPerformanceFrequency(&li)){
-        qDebug() <<"QueryPerformanceFrequency failed!";
+    if (!QueryPerformanceFrequency(&li))
+    {
+        qDebug() << "QueryPerformanceFrequency failed!";
     }
 
-    PCFreq = double(li.QuadPart)/1000.0;
+    PCFreq = double(li.QuadPart) / 1000.0;
 
     QueryPerformanceCounter(&li);
     int64_t CounterStart = li.QuadPart;
 
-    if(!openFlag){
+    if (!openFlag)
+    {
         open_input_file();
     }
 
-    while(av_read_frame(fmtCtx,pkt)>=0){
-        if(stopFlag) break;
-        if(pkt->stream_index == videoStreamIndex){
-            if(avcodec_send_packet(videoCodecCtx,pkt)>=0){
+    while (av_read_frame(fmtCtx, pkt) >= 0)
+    {
+        if (stopFlag)
+            break;
+        if (pkt->stream_index == videoStreamIndex)
+        {
+            if (avcodec_send_packet(videoCodecCtx, pkt) >= 0)
+            {
                 int ret;
-                while((ret=avcodec_receive_frame(videoCodecCtx,yuvFrame))>=0){
+                while ((ret = avcodec_receive_frame(videoCodecCtx, yuvFrame)) >= 0)
+                {
                     if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
                         return;
-                    else if (ret < 0) {
-                        qDebug( "Error during decoding\n");
+                    else if (ret < 0)
+                    {
+                        qDebug("Error during decoding\n");
                         exit(1);
                     }
 
-                    if(yuvFrame->format==videoCodecCtx->pix_fmt){
-                        //nv12Frame->format=AV_PIX_FMT_NV12;
-                        static bool hwframe_mapok=1;
+                    if (yuvFrame->format == videoCodecCtx->pix_fmt)
+                    {
+                        // nv12Frame->format=AV_PIX_FMT_NV12;
+                        static bool hwframe_mapok = 0;
                         int ret = -1;
 
-                        if(hwframe_mapok){
+                        if (hwframe_mapok)
+                        {
 #ifdef QT_DEBUG_HWMAP
                             QueryPerformanceCounter(&li);
                             int64_t CounterStart = li.QuadPart;
 #endif
-                            ret = av_hwframe_map(nv12Frame,yuvFrame,0);
+                            ret = av_hwframe_map(nv12Frame, yuvFrame, 0);
 #ifdef QT_DEBUG_HWMAP
                             QueryPerformanceCounter(&li);
-                            double times = 1.0*(li.QuadPart-CounterStart)/PCFreq;
-                            qDebug("\033[32mav_hwframe_map Time:%d %.2fms", li.QuadPart-CounterStart, times);
+                            double times = 1.0 * (li.QuadPart - CounterStart) / PCFreq;
+                            qDebug("\033[32mav_hwframe_map Time:%d %.2fms", li.QuadPart - CounterStart, times);
 #endif
 
-                            if(ret<0){
-                                    hwframe_mapok=false;
-                                    char buf[256]={0};
-                                    av_strerror(ret,buf,sizeof(buf)-1);
-                                    qCritical()<<"av_hwframe_map error: "<< buf;
-                                    //av_frame_unref(nv12Frame);
-                            }else{
-                                nv12Frame->height=yuvFrame->height;
-                                nv12Frame->width =yuvFrame->width;
-                                static bool infoFlag=false;
-                                if(!infoFlag){
-                                    infoFlag=1;
-                                    qDebug()<<"av_hwframe_map ok";
+                            if (ret < 0)
+                            {
+                                hwframe_mapok = false;
+                                char buf[256] = {0};
+                                av_strerror(ret, buf, sizeof(buf) - 1);
+                                qCritical() << "av_hwframe_map error: " << buf;
+                                // av_frame_unref(nv12Frame);
+                            }
+                            else
+                            {
+                                nv12Frame->height = yuvFrame->height;
+                                nv12Frame->width = yuvFrame->width;
+                                static bool infoFlag = false;
+                                if (!infoFlag)
+                                {
+                                    infoFlag = 1;
+                                    qDebug() << "av_hwframe_map ok";
                                 }
                             }
-
                         }
 
-                        if( !hwframe_mapok ){
-                            //qDebug()<<"av_hwframe_map failue use av_hwframe_transfer_data";
-                            //nv12Frame->format=AV_PIX_FMT_NV12;
-                            #ifdef QT_DEBUG_HWMAP
+                        if (!hwframe_mapok)
+                        {
+// qDebug()<<"av_hwframe_map failue use av_hwframe_transfer_data";
+// nv12Frame->format=AV_PIX_FMT_NV12;
+#ifdef QT_DEBUG_HWMAP
                             QueryPerformanceCounter(&li);
                             int64_t CounterStart = li.QuadPart;
-                            #endif
+#endif
 
-                            ret = av_hwframe_transfer_data(nv12Frame,yuvFrame,0);
+                            ret = av_hwframe_transfer_data(nv12Frame, yuvFrame, 0);
 
-                            #ifdef QT_DEBUG_HWMAP
+#ifdef QT_DEBUG_HWMAP
                             QueryPerformanceCounter(&li);
-                            double times = 1.0*(li.QuadPart-CounterStart)/PCFreq;
-                            qDebug("\033[32mav_hwframe_transfer_data Time:%d %.2fms", li.QuadPart-CounterStart, times);
-                            #endif
+                            double times = 1.0 * (li.QuadPart - CounterStart) / PCFreq;
+                            qDebug("\033[32mav_hwframe_transfer_data Time:%d %.2fms", li.QuadPart - CounterStart, times);
+#endif
 
-                            #ifdef QT_DEBUG
-                            AVPixelFormat f1 = static_cast<AVPixelFormat>(yuvFrame->format) ;
+#ifdef QT_DEBUG
+                            AVPixelFormat f1 = static_cast<AVPixelFormat>(yuvFrame->format);
                             AVPixelFormat f2 = static_cast<AVPixelFormat>(nv12Frame->format);
                             AVPixelFormat f3 = AV_PIX_FMT_YUV420P;
                             AVPixelFormat f4 = AV_PIX_FMT_NV12;
-                            f4=f4;
-                            #endif
+                            f4 = f4;
+#endif
 
-                            if((ret)<0){
-                                static bool outflag=false;
-                                //av_frame_unref(nv12Frame);
-                                //av_frame_unref(yuvFrame);
-                                if(!outflag){
-                                    char buf[256]={0};
-                                    av_strerror(ret,buf,sizeof(buf)-1);
-                                    qCritical()<<"av_hwframe_transfer_data error: "<< buf << nv12Frame->format;
-                                    outflag=true;
+                            if ((ret) < 0)
+                            {
+                                static bool outflag = false;
+                                // av_frame_unref(nv12Frame);
+                                // av_frame_unref(yuvFrame);
+                                if (!outflag)
+                                {
+                                    char buf[256] = {0};
+                                    av_strerror(ret, buf, sizeof(buf) - 1);
+                                    qCritical() << "av_hwframe_transfer_data error: " << buf << nv12Frame->format;
+                                    outflag = true;
                                 }
-                                if(nv12Frame->format==AV_PIX_FMT_NONE)
+                                if (nv12Frame->format == AV_PIX_FMT_NONE)
                                     continue;
                             }
                         }
                     }
 
-                    if(nv12Frame->format!=AV_PIX_FMT_NV12){
-                        static bool changed = false; //AV_PIX_FMT_P010LE
-                        if(!changed ){
-                            qDebug()<<"Format:"<< nv12Frame->format;
-                            qDebug()<<"change src format from " <<  av_get_pix_fmt_name((AVPixelFormat)(AV_PIX_FMT_NV12)) <<"to" <<  av_get_pix_fmt_name((AVPixelFormat)nv12Frame->format);
-                            AVPixelFormat src_fmt = AV_PIX_FMT_P010LE;//videoCodecCtx->pix_fmt;AV_PIX_FMT_NV12;
+                    if (nv12Frame->format != AV_PIX_FMT_NV12)
+                    {
+                        static bool changed = false; // AV_PIX_FMT_P010LE
+                        if (!changed)
+                        {
+                            qDebug() << "Format:" << nv12Frame->format;
+                            qDebug() << "change src format from " << av_get_pix_fmt_name((AVPixelFormat)(nv12Frame->format)) << "to" << av_get_pix_fmt_name((AVPixelFormat)destFormat);
+                            AVPixelFormat src_fmt = AV_PIX_FMT_P010LE; // videoCodecCtx->pix_fmt;AV_PIX_FMT_NV12;
                             img_ctx = sws_getContext(videoCodecCtx->width,
                                                      videoCodecCtx->height,
-                                                     (AVPixelFormat)nv12Frame->format,// AV_PIX_FMT_NV12,//AV_PIX_FMT_NV21//videoCodecCtx->pix_fmt, //AV_PIX_FMT_NV12 ,//  AV_PIX_FMT_NV12,
+                                                     (AVPixelFormat)nv12Frame->format, // AV_PIX_FMT_NV12,//AV_PIX_FMT_NV21//videoCodecCtx->pix_fmt, //AV_PIX_FMT_NV12 ,//  AV_PIX_FMT_NV12,
                                                      videoCodecCtx->width,
                                                      videoCodecCtx->height,
-                                                     destFormat,//AV_PIX_FMT_RGB32, AV_PIX_FMT_NV12 AV_PIX_FMT_YUV420P
-                                                     SWS_FAST_BILINEAR,//SWS_BICUBIC, SWS_BILINEAR
-                                                     NULL,NULL,NULL);
+                                                     destFormat,        // AV_PIX_FMT_RGB32, AV_PIX_FMT_NV12 AV_PIX_FMT_YUV420P
+                                                     SWS_FAST_BILINEAR, // SWS_BICUBIC, SWS_BILINEAR
+                                                     NULL, NULL, NULL);
                             changed = true;
                         }
                     }
-                    //*
-                    ret = sws_scale(img_ctx,
-                              (const uint8_t* const*)nv12Frame->data,
-                              (const int*)nv12Frame->linesize,
-                              0,
-                              nv12Frame->height,
-                              rgbFrame->data,rgbFrame->linesize);
 
-                    if((ret)<0){
-                        char buf[256]={0};
-                        av_strerror(ret,buf,sizeof(buf)-1);
-                        qCritical()<<"sws_scale error: "<< buf;
-                        av_frame_unref(nv12Frame);
-                        av_frame_unref(yuvFrame);
-                        continue;
-                    }
+                    // use SDL OK!!!
+                    if (useSDL)
+                    {
+                        AV_PIX_FMT_NV12; //
 
-                    //*/
-                    av_frame_unref(nv12Frame);
-                    av_frame_unref(yuvFrame);
-
-                    //use SDL OK!!!
-                    if(useSDL){
-                        numBytes = av_image_get_buffer_size(destFormat, videoCodecCtx->width, videoCodecCtx->height, 1);
+                        numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV12, videoCodecCtx->width, videoCodecCtx->height, 1);
+                        //numBytes = av_image_get_buffer_size(destFormat, videoCodecCtx->width, videoCodecCtx->height, 1);
                         uchar *out_buffer1 = (unsigned char *)av_malloc(numBytes * sizeof(uchar));
 
-                        if (0)
+                        if (useSDL)
                         {
+                            //memset(out_buffer1, 'A', numBytes);
                             av_image_copy_to_buffer(out_buffer1, numBytes,
                                                     (const uint8_t *const *)nv12Frame->data, // const uint8_t * const src_data[4],
                                                     (const int *)nv12Frame->linesize,        // const int src_linesize[4],
-                                                    destFormat,                              // enum AVPixelFormat pix_fmt, int width, int height, int align);
+                                                    AV_PIX_FMT_NV12,                              // enum AVPixelFormat pix_fmt, int width, int height, int align);
                                                     nv12Frame->width, nv12Frame->height,
                                                     1);
 
-                            // memcpy(out_buffer1, nv12Frame->data,numBytes);
-                        }
-                        memcpy(out_buffer1, out_buffer, numBytes);
+                            linesize = nv12Frame->linesize[0];
+                        }        
+                        //memcpy(out_buffer1, out_buffer, numBytes);
 
                         g_mutex.lock();
                         frameTupleList.push_back(make_tuple(yuvFrame->pts, out_buffer1));
                         g_mutex.unlock();
                     }
-                    else{
-                        // numBytes;
-                        if(1){//thread fresh
-                            QImage *pimg = new QImage(out_buffer,
-                                              videoCodecCtx->width,videoCodecCtx->height,
-                                              QImage::Format_RGB32);
+                    else
+                    {
+                        //*
+                        ret = sws_scale(img_ctx,
+                                        (const uint8_t *const *)nv12Frame->data,
+                                        (const int *)nv12Frame->linesize,
+                                        0,
+                                        nv12Frame->height,
+                                        rgbFrame->data, rgbFrame->linesize);
 
-                            IMG img;img.img=pimg;img.pts=yuvFrame->pts;
+                        if ((ret) < 0)
+                        {
+                            char buf[256] = {0};
+                            av_strerror(ret, buf, sizeof(buf) - 1);
+                            qCritical() << "sws_scale error: " << buf;
+                            av_frame_unref(nv12Frame);
+                            av_frame_unref(yuvFrame);
+                            continue;
+                        }
+
+                        //*/
+                        av_frame_unref(nv12Frame);
+                        av_frame_unref(yuvFrame);
+
+                        // numBytes;
+                        if (1)
+                        { // thread fresh
+                            QImage *pimg = new QImage(out_buffer,
+                                                      videoCodecCtx->width, videoCodecCtx->height,
+                                                      QImage::Format_RGB32);
+
+                            IMG img;
+                            img.img = pimg;
+                            img.pts = yuvFrame->pts;
                             Images.push_back(img);
-                        }else{
+                        }
+                        else
+                        {
                             QImage rImg(out_buffer,
-                                        videoCodecCtx->width,videoCodecCtx->height,
+                                        videoCodecCtx->width, videoCodecCtx->height,
                                         QImage::Format_RGB32);
-                             emit sendQImage(rImg);
-                             QThread::msleep(1);
+                            emit sendQImage(rImg);
+                            QThread::msleep(1);
                         }
                     }
 
@@ -435,74 +494,83 @@ void FFmpegVideo::run()
             }
             av_packet_unref(pkt);
         }
-        else if(pkt->stream_index == audioStreamIndex){
-            //qDebug()<<"audioStream";
+        else if (pkt->stream_index == audioStreamIndex)
+        {
+            // qDebug()<<"audioStream";
         }
-        else{
+        else
+        {
             int index = pkt->stream_index;
-            index ++;
+            index++;
             //????
-            //qDebug()<<"otherStream"<<pkt->stream_index;
+            // qDebug()<<"otherStream"<<pkt->stream_index;
         }
     }
 
-    //av_hwdevice_ctx_free(&hw_device_ctx);
+    // av_hwdevice_ctx_free(&hw_device_ctx);
     av_frame_free(&yuvFrame);
     av_frame_free(&nv12Frame);
     av_frame_free(&rgbFrame);
-    //av_frame_free(&sendFrame);
+    // av_frame_free(&sendFrame);
     av_packet_free(&pkt);
     avcodec_free_context(&videoCodecCtx);
-    //av_close_input_file(pFormatCtx);
-    //avformat_free_context(pFormatCtx);
+    // av_close_input_file(pFormatCtx);
+    // avformat_free_context(pFormatCtx);
     sws_freeContext(img_ctx);
     av_freep(&out_buffer);
-    
-    qDebug()<<"Thread stop now " << __FUNCTION__ ;
-}
 
+    qDebug() << "Thread stop now " << __FUNCTION__;
+}
 
 void PlayVideo::run()
 {
-    int frametime=40;//ms
+    int frametime = 40; // ms
     double PCFreq = 0.0;
     LARGE_INTEGER freq;
 
     LARGE_INTEGER li;
-    if(!QueryPerformanceFrequency(&li)){
-        qDebug() <<"QueryPerformanceFrequency failed!";
+    if (!QueryPerformanceFrequency(&li))
+    {
+        qDebug() << "QueryPerformanceFrequency failed!";
     }
 
-    PCFreq = double(li.QuadPart)/1000.0;
+    PCFreq = double(li.QuadPart) / 1000.0;
 
     QueryPerformanceCounter(&li);
     int64_t CounterStart = li.QuadPart;
 
-    int64_t lipre=CounterStart;
+    int64_t lipre = CounterStart;
 
     MMRESULT rx = timeBeginPeriod(1);
     ::Sleep(0);
 
-    int64_t pts_pre=0;
-    bool disp=0;
-    int sleeptime=10;
+    int64_t pts_pre = 0;
+    bool disp = 0;
+    int sleeptime = 10;
 
-    if(rx != TIMERR_NOERROR){
-        qDebug() <<"timeBeginPeriod failed!";
-        sleeptime=390;
+    if (rx != TIMERR_NOERROR)
+    {
+        qDebug() << "timeBeginPeriod failed!";
+        sleeptime = 390;
     }
 
     sendFrame = av_frame_alloc();
-    bool sdl_inited=false;
+    bool sdl_inited = false;
 
-    int64_t count=0;
+    int64_t count = 0;
 
     QueryPerformanceCounter(&li);
-    CounterStart = 0;//li.QuadPart;
+    CounterStart = 0; // li.QuadPart;
 
-    while(!stopFlag){
-        if(frameTupleList.size()>0){
-            if(useSDL){
+    int w, h;
+    SDL_Rect rect;
+
+    while (!stopFlag)
+    {
+        if (frameTupleList.size())
+        {
+            if (useSDL)
+            {
                 if (!sdl_inited)
                 {
                     sdl_inited = true;
@@ -526,22 +594,30 @@ void PlayVideo::run()
                         // goto __FAIL;
                     }
 
-                    // SDL渲染器
-                    renderer = SDL_CreateRenderer(win, -1, 0); // 0 SDL_RENDERER_ACCELERATED
+                    // SDL渲染器 0:d3d 1:d3d11 2:opengl 3:opengles2 4:software
+                    const char *ACCTYPE[5] = {"d3d", "d3d11", "opengl", "opengles2", "software"};
+                    if(accelsType!=4)
+                        renderer = SDL_CreateRenderer(win, accelsType, SDL_RENDERER_ACCELERATED); // 【-1，0】 0 SDL_RENDERER_ACCELERATED
+                    else
+                        renderer = SDL_CreateRenderer(win, -1, 0); // 【-1，0】 0 SDL_RENDERER_ACCELERATED
+
+                    qDebug("SDL use accel type:%d:%s", accelsType, ACCTYPE[accelsType]);
+
                     if (!renderer)
                     {
                         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create renderer!");
                         // goto __FAIL;
                     }
 
-                    int w, h;
                     SDL_GetWindowSize(win, &w, &h);
 
+
+                    (accelsType!=4);
                     // 创建显示帧
-                    Uint32 pixformat = SDL_PIXELFORMAT_IYUV;
+                    Uint32 pixformat = SDL_PIXELFORMAT_NV12; // SDL_PIXELFORMAT_IYUV;
                     texture = SDL_CreateTexture(renderer,
                                                 pixformat,
-                                                SDL_TEXTUREACCESS_STREAMING, // SDL_RENDERER_ACCELERATED,//SDL_TEXTUREACCESS_STREAMING,
+                                                SDL_TEXTUREACCESS_STATIC,// SDL_TEXTUREACCESS_STATIC, SDL_TEXTUREACCESS_STREAMING SDL_TEXTUREACCESS_TARGET
                                                 g_videowidth,
                                                 g_videoheight);
 
@@ -553,62 +629,70 @@ void PlayVideo::run()
                 }
             }
 
-
-            tuple<int64_t /*pts*/, uchar*/*buffer*/ > tuple = frameTupleList.front();
+            tuple<int64_t /*pts*/, uchar * /*buffer*/> tuple = frameTupleList.front();
 
             int64_t pts = get<0>(tuple);
-            uchar*  buf = get<1>(tuple);
+            uchar *buf = get<1>(tuple);
 
-            if(pts_pre==0) pts_pre=pts;
-            //*
+            if (pts_pre == 0)  pts_pre = pts;
+
+            /*
+            destFormat=AV_PIX_FMT_NV12;
             int res = av_image_fill_arrays(
-                        sendFrame->data,sendFrame->linesize,
-                        buf,
-                        destFormat,
-                        sendFrame->width,sendFrame->height,1);
-            //*/
-            //渲染图像
+                sendFrame->data, sendFrame->linesize,
+                buf,
+                destFormat,
+                sendFrame->width, sendFrame->height, 1);
+            */
+
+            // 渲染图像
+            /*
             SDL_UpdateYUVTexture(texture, NULL,
                 sendFrame->data[0], sendFrame->linesize[0],
                 sendFrame->data[1], sendFrame->linesize[1],
                 sendFrame->data[2], sendFrame->linesize[2]);
+            */
 
-            int w,h;
-            SDL_GetWindowSize(win, &w, &h);
-            SDL_Rect rect;
+            // SDL 渲染图像使用NV12格式
+            SDL_UpdateTexture(texture, NULL, buf, linesize);//sendFrame->linesize[0]);
+
             rect.x = 0;
             rect.y = 0;
             rect.w = w;
             rect.h = h;
 
-            //QueryPerformanceCounter(&li);
-            //CounterStart=li.QuadPart;
-            //qDebug()<< "Render " <<QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*") << (CounterStart-lipre)/PCFreq << pts-pts_pre ;
+            // QueryPerformanceCounter(&li);
+            // CounterStart=li.QuadPart;
+            // qDebug()<< "Render " <<QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*") << (CounterStart-lipre)/PCFreq << pts-pts_pre ;
 
-            SDL_RenderClear(renderer);
-            SDL_RenderCopy(renderer, texture, NULL, &rect);
+            //SDL_RenderClear(renderer);
+            SDL_RenderCopy(renderer, texture, NULL, NULL);
             SDL_RenderPresent(renderer);
-            //SDL_Delay(0);
-            //av_packet_unref(&packet);
 
-            SDL_PollEvent(&SDLevent);
+            // SDL_Delay(0);
+            // av_packet_unref(&packet);
+
+            //SDL_PollEvent(&SDLevent);
 
             av_free(buf);
-            pts_pre=pts;
+            pts_pre = pts;
 
             QueryPerformanceCounter(&li);
-            if(CounterStart==0){
+            if (CounterStart == 0)
+            {
                 CounterStart = li.QuadPart;
             }
-            int64_t totaltimes = 1.0*(li.QuadPart-CounterStart)/PCFreq;
+            int64_t totaltimes = 1.0 * (li.QuadPart - CounterStart) / PCFreq;
 
-            //QueryPerformanceCounter(&li);
-            //CounterStart=li.QuadPart;
+            // QueryPerformanceCounter(&li);
+            // CounterStart=li.QuadPart;
 
-            int deltatime = totaltimes %frametime;
-            int sleepms = 1.0*frametime -  deltatime;
-            if(sleepms<0)sleepms=frametime/3;
-            else if(sleepms>frametime) sleepms=frametime;
+            int deltatime = totaltimes -( frametime*count);
+            int sleepms = 1.0 * frametime - deltatime;
+            if (sleepms < 0)
+                sleepms = 0;//frametime / 3;
+            else if (sleepms > frametime)
+                sleepms = 0;
 
             g_mutex.lock();
             frameTupleList.pop_front();
@@ -616,100 +700,116 @@ void PlayVideo::run()
 
             ::Sleep(sleepms);
             //::WaitForSingleObject()
-            //QueryPerformanceCounter(&li);
+            // QueryPerformanceCounter(&li);
             lipre = CounterStart;
 
-#define LOGCOUNT 25000
-            if( count % LOGCOUNT ==(LOGCOUNT-1) )
+            bool outinfos=0;
+            if( outinfos )
+           {
+               qDebug("\033[36m %s sleep%2dms TotalFrames:%5d TotalTime:%6d deltaTime:%2d",
+                       QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*").toStdString().c_str(),
+                          sleepms, count, totaltimes, deltatime);
+            }
+#define LOGCOUNT 25
+             if( count % LOGCOUNT ==(LOGCOUNT-1)*0 )
             {
-                qDebug("\033[35mRender sleepms:%2d %3d PlayTime:%3d:%02d:%02d.%03d (%5d) deltaTime:%2d",sleepms ,count,
-                       totaltimes/60/60/1000, totaltimes/60/1000%60, totaltimes/1000%60, totaltimes%1000,totaltimes,
+                qDebug("\033[36m %s Render sleepms:%2d %3d PlayTime:%3d:%02d:%02d.%03d (%5d) deltaTime:%2d",
+                       QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*").toStdString().c_str(),
+                       sleepms, count,
+                       totaltimes / 60 / 60 / 1000, totaltimes / 60 / 1000 % 60, totaltimes / 1000 % 60, totaltimes % 1000, totaltimes,
                        deltatime);
             }
-            count ++;
+            count++;
         }
-        else if(Images.size()>0){
+        else if (Images.size() > 0)
+        {
             IMG img = Images.front();
             Images.pop_front();
 
-            if(!disp)
+            if (!disp)
             {
                 QueryPerformanceCounter(&li);
                 //(li.QuadPart-lipre)/PCFreq;
 
                 QThread::yieldCurrentThread();
-                emit sendQImage(img);//
+                emit sendQImage(img); //
 
-                //qDebug()<< "S" <<QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*")<<img.pts-pts_pre<<(li.QuadPart-lipre)/PCFreq<<Images.size();
-                //QThread::yieldCurrentThread();
-                //disp=1;
-                lipre= li.QuadPart;
+                // qDebug()<< "S" <<QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*")<<img.pts-pts_pre<<(li.QuadPart-lipre)/PCFreq<<Images.size();
+                // QThread::yieldCurrentThread();
+                // disp=1;
+                lipre = li.QuadPart;
             }
 
-            if(Images.size()>6){
-                //qDebug()<< "S" <<QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*")<<img.pts-pts_pre<<Images.size();
-                //sleeptime--;
-                //if(sleeptime<=25)sleeptime=25;
-            }else
+            if (Images.size() > 6)
             {
-                //sleeptime++;
-                //if(sleeptime>=38)sleeptime=38;
+                // qDebug()<< "S" <<QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*")<<img.pts-pts_pre<<Images.size();
+                // sleeptime--;
+                // if(sleeptime<=25)sleeptime=25;
+            }
+            else
+            {
+                // sleeptime++;
+                // if(sleeptime>=38)sleeptime=38;
             }
 
-            pts_pre=img.pts;
+            pts_pre = img.pts;
             ::Sleep(sleeptime);
-            //delete img.img;
+            // delete img.img;
         }
-        else{
-            //NSSleep(sleeptime);
-            //qDebug()<<"PlayVideo Thread sleep";
+        else
+        {
+            // NSSleep(sleeptime);
+            // qDebug()<<"PlayVideo Thread sleep";
             QThread::msleep(5);
-            //av_usleep(sleeptime*1000);
+            // av_usleep(sleeptime*1000);
             //::Sleep(sleeptime);
         }
     }
 
-    if(useSDL){
-        if(win) SDL_DestroyWindow(win);
+    if (useSDL)
+    {
+        if (win)
+            SDL_DestroyWindow(win);
         SDL_DestroyRenderer(renderer);
         SDL_DestroyTexture(texture);
     }
     rx = timeEndPeriod(1);
 
-    qDebug()<<"PlayVideo Thread end now" << __FUNCTION__ ;
+    qDebug() << "PlayVideo Thread end now" << __FUNCTION__;
 }
-
 
 FFmpegWidget::FFmpegWidget(QWidget *parent) : QWidget(parent)
 {
     ffmpeg = new FFmpegVideo;
-    connect(ffmpeg,SIGNAL(sendQImage(QImage)),this,SLOT(receiveQImage(QImage)),Qt::DirectConnection);
-    connect(ffmpeg,&FFmpegVideo::finished,ffmpeg,&FFmpegVideo::deleteLater);
+    connect(ffmpeg, SIGNAL(sendQImage(QImage)), this, SLOT(receiveQImage(QImage)), Qt::DirectConnection);
+    connect(ffmpeg, &FFmpegVideo::finished, ffmpeg, &FFmpegVideo::deleteLater);
 
-    playf  = new PlayVideo;
+    playf = new PlayVideo;
 
-    //connect(ffmpeg,SIGNAL(snedQImage(IMG)),this,SLOT(receiveQImage(IMG)),Qt::DirectConnection);
-    connect(playf, SIGNAL(sendQImage(IMG)),this,SLOT(receiveQImage(IMG)),Qt::DirectConnection);
-    connect(playf, SIGNAL(sendQImage(QImage)),this,SLOT(receiveQImage(QImage)),Qt::DirectConnection);
+    // connect(ffmpeg,SIGNAL(snedQImage(IMG)),this,SLOT(receiveQImage(IMG)),Qt::DirectConnection);
+    connect(playf, SIGNAL(sendQImage(IMG)), this, SLOT(receiveQImage(IMG)), Qt::DirectConnection);
+    connect(playf, SIGNAL(sendQImage(QImage)), this, SLOT(receiveQImage(QImage)), Qt::DirectConnection);
 }
 
 FFmpegWidget::~FFmpegWidget()
 {
-    qDebug()<<"exit player";
-    if(ffmpeg->isRunning()){
+    qDebug() << "exit player";
+    if (ffmpeg->isRunning())
+    {
         stop();
     }
 }
 
 void FFmpegWidget::play(QString url)
 {
-    if(0) {
-        SDL_Window * window;  //->winId()
-        window = SDL_CreateWindowFrom( (void*)this->windowHandle() );//  (void*)ui->widget->window()->winId());// ->windowHandle());
-        SDL_Surface * _pScreens = SDL_GetWindowSurface(window);
+    if (0)
+    {
+        SDL_Window *window;                                          //->winId()
+        window = SDL_CreateWindowFrom((void *)this->windowHandle()); //  (void*)ui->widget->window()->winId());// ->windowHandle());
+        SDL_Surface *_pScreens = SDL_GetWindowSurface(window);
 
         SDL_LoadBMP("C:\\Dev\\vlcsnap.bmp");
-        return ;
+        return;
     }
 
     ffmpeg->setPath(url);
@@ -719,7 +819,8 @@ void FFmpegWidget::play(QString url)
 
 void FFmpegWidget::stop()
 {
-    if(ffmpeg->isRunning()){
+    if (ffmpeg->isRunning())
+    {
         ffmpeg->stopThread();
         playf->stopThread();
         QThread::msleep(20);
@@ -728,7 +829,8 @@ void FFmpegWidget::stop()
         ffmpeg->wait(200);
     }
 
-    if(playf->isRunning()){
+    if (playf->isRunning())
+    {
         QThread::msleep(50);
         playf->requestInterruption();
         playf->quit();
@@ -741,66 +843,71 @@ void FFmpegWidget::stop()
 void FFmpegWidget::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
-    //qDebug()<< "Draw" << QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*")  ;
-    painter.drawImage(0,0,img);
-    //qDebug()<< "Draw" << QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*")  ;
+    // qDebug()<< "Draw" << QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*")  ;
+    painter.drawImage(0, 0, img);
+    // qDebug()<< "Draw" << QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*")  ;
 }
 
 void FFmpegWidget::receiveQImage(const IMG &rImg)
 {
-    static int64_t times=0;
+    static int64_t times = 0;
 
     QDateTime startDT = QDateTime::currentDateTime();
     static QDateTime preDT = QDateTime::currentDateTime();
 
-    int delta = (startDT.time().msec()-preDT.time().msec());
-    if(delta<0) delta+=1000;
+    int delta = (startDT.time().msec() - preDT.time().msec());
+    if (delta < 0)
+        delta += 1000;
 
-    //delta-=40;
+    // delta-=40;
 
-    static int64_t pts_pre=0;
-    //QThread::yieldCurrentThread();
+    static int64_t pts_pre = 0;
+    // QThread::yieldCurrentThread();
 
-    //img = rImg.img->scaled(nw,nh);//KeepAspectRatioByExpanding  KeepAspectRatio SmoothTransformation FastTransformation
+    // img = rImg.img->scaled(nw,nh);//KeepAspectRatioByExpanding  KeepAspectRatio SmoothTransformation FastTransformation
 
-    img = rImg.img->scaled(this->size(),Qt::KeepAspectRatio,Qt::SmoothTransformation);
-    //qDebug()<< "R" <<startDT.toString("-hh:mm:ss.zzz-")<< QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*") << delta << rImg.pts-pts_pre<<rImg.pts;
-    pts_pre=rImg.pts; preDT = startDT;
+    img = rImg.img->scaled(this->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    // qDebug()<< "R" <<startDT.toString("-hh:mm:ss.zzz-")<< QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*") << delta << rImg.pts-pts_pre<<rImg.pts;
+    pts_pre = rImg.pts;
+    preDT = startDT;
     delete rImg.img;
 
-    //QPainter painter(this);
-    //painter.drawImage(0,0,img);
+    // QPainter painter(this);
+    // painter.drawImage(0,0,img);
 
-    //update();
+    // update();
     this->repaint();
 
-    if(times%25==0){
-        qDebug()<< "R" <<startDT.toString("-hh:mm:ss.zzz-")<< QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*") << delta << rImg.pts-pts_pre<<times;
+    if (times % 25 == 0)
+    {
+        qDebug() << "R" << startDT.toString("-hh:mm:ss.zzz-") << QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*") << delta << rImg.pts - pts_pre << times;
     }
-    times ++;
+    times++;
     QThread::yieldCurrentThread();
 }
 
 void FFmpegWidget::receiveQImage(const QImage &rImg)
 {
-    static int64_t times=0;
+    static int64_t times = 0;
     QDateTime startDT = QDateTime::currentDateTime();
     static QDateTime preDT = QDateTime::currentDateTime();
 
-    int delta = (startDT.time().msec()-preDT.time().msec());
-    if(delta<0) delta+=1000;
+    int delta = (startDT.time().msec() - preDT.time().msec());
+    if (delta < 0)
+        delta += 1000;
 
-    //delta-=40;
+    // delta-=40;
 
-    static int64_t pts_pre=0;
+    static int64_t pts_pre = 0;
 
-    img = rImg.scaled(this->size(),Qt::KeepAspectRatio,Qt::SmoothTransformation);
+    img = rImg.scaled(this->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
-    //update();
+    // update();
     repaint();
-    if(times%25==0){
-        qDebug()<< "R" <<startDT.toString("-hh:mm:ss.zzz-")<< QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*") << delta ;
+    if (times % 25 == 0)
+    {
+        qDebug() << "R" << startDT.toString("-hh:mm:ss.zzz-") << QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*") << delta;
     }
-    times ++;
-    //QThread::yieldCurrentThread();
+    times++;
+    // QThread::yieldCurrentThread();
 }
