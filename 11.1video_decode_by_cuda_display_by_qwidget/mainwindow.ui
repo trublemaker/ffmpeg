@@ -45,7 +45,7 @@
      <widget class="QLineEdit" name="edtServer">
       <property name="maximumSize">
        <size>
-        <width>140</width>
+        <width>110</width>
         <height>16777215</height>
        </size>
       </property>
@@ -70,6 +70,9 @@
       </property>
       <property name="currentText">
        <string>D3D11</string>
+      </property>
+      <property name="currentIndex">
+       <number>1</number>
       </property>
       <item>
        <property name="text">

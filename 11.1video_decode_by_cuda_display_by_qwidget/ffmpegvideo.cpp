@@ -316,7 +316,7 @@ void FFmpegVideo::run()
                     if (yuvFrame->format == videoCodecCtx->pix_fmt)
                     {
                         // nv12Frame->format=AV_PIX_FMT_NV12;
-                        static bool hwframe_mapok = 0;
+                        static bool hwframe_mapok = 1;
                         int ret = -1;
 
                         if (hwframe_mapok)
@@ -396,7 +396,7 @@ void FFmpegVideo::run()
                         }
                     }
 
-                    if (nv12Frame->format != AV_PIX_FMT_NV12)
+                    if (!useSDL && nv12Frame->format != AV_PIX_FMT_NV12)
                     {
                         static bool changed = false; // AV_PIX_FMT_P010LE
                         if (!changed)
@@ -419,25 +419,82 @@ void FFmpegVideo::run()
                     // use SDL OK!!!
                     if (useSDL)
                     {
+                        uchar *out_buffer1=nullptr;
                         AV_PIX_FMT_NV12; //
-
-                        numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV12, videoCodecCtx->width, videoCodecCtx->height, 1);
-                        //numBytes = av_image_get_buffer_size(destFormat, videoCodecCtx->width, videoCodecCtx->height, 1);
-                        uchar *out_buffer1 = (unsigned char *)av_malloc(numBytes * sizeof(uchar));
-
-                        if (useSDL)
+                        if (nv12Frame->format != AV_PIX_FMT_NV12)
                         {
+                            static bool changed = false; // AV_PIX_FMT_P010LE
+                            if (!changed)
+                            {
+                                qDebug() << "Format:" << nv12Frame->format;
+                                qDebug() << "change src format from " << av_get_pix_fmt_name((AVPixelFormat)(nv12Frame->format)) << "to" << av_get_pix_fmt_name(AV_PIX_FMT_NV12);
+                                AVPixelFormat src_fmt = AV_PIX_FMT_P010LE; // videoCodecCtx->pix_fmt;AV_PIX_FMT_NV12;
+                                img_ctx = sws_getContext(videoCodecCtx->width,
+                                                         videoCodecCtx->height,
+                                                         (AVPixelFormat)nv12Frame->format, // AV_PIX_FMT_NV12 videoCodecCtx->pix_fmt, //AV_PIX_FMT_NV12
+                                                         videoCodecCtx->width,
+                                                         videoCodecCtx->height,
+                                                         AV_PIX_FMT_NV12,       // AV_PIX_FMT_RGB32, AV_PIX_FMT_NV12 AV_PIX_FMT_YUV420P
+                                                         SWS_BICUBIC,           // SWS_BICUBIC, SWS_BILINEAR SWS_FAST_BILINEAR
+                                                         NULL, NULL, NULL);
+                                changed = true;
+                            }
+
+                            //*
+                            ret = sws_scale(img_ctx,
+                                            (const uint8_t *const *)nv12Frame->data,
+                                            (const int *)nv12Frame->linesize,
+                                            0,
+                                            nv12Frame->height,
+                                            rgbFrame->data, rgbFrame->linesize);
+
+                            if ((ret) < 0)
+                            {
+                                char txtbuf[256] = {0};
+                                av_strerror(ret, txtbuf, sizeof(txtbuf) - 1);
+                                qCritical() << "sws_scale error: " << txtbuf;
+                                av_frame_unref(nv12Frame);
+                                av_frame_unref(yuvFrame);
+                                continue;
+                            }
+
+                            //*/
+
+                            numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV12, videoCodecCtx->width, videoCodecCtx->height, 1);
+                            out_buffer1 = (unsigned char *)av_malloc(numBytes * sizeof(uchar));
                             //memset(out_buffer1, 'A', numBytes);
+                            //*
                             av_image_copy_to_buffer(out_buffer1, numBytes,
-                                                    (const uint8_t *const *)nv12Frame->data, // const uint8_t * const src_data[4],
-                                                    (const int *)nv12Frame->linesize,        // const int src_linesize[4],
-                                                    AV_PIX_FMT_NV12,                              // enum AVPixelFormat pix_fmt, int width, int height, int align);
-                                                    nv12Frame->width, nv12Frame->height,
-                                                    1);
+                                                        (const uint8_t *const *)rgbFrame->data, // const uint8_t * const src_data[4],
+                                                        (const int *)rgbFrame->linesize,        // const int src_linesize[4],
+                                                        AV_PIX_FMT_NV12,                              // enum AVPixelFormat pix_fmt, int width, int height, int align);
+                                                        nv12Frame->width, nv12Frame->height,
+                                                        1);
+                            //*/
+                            //memcpy(out_buffer1, out_buffer, numBytes);
+
+                            linesize = rgbFrame->linesize[0];
+
+                        }else{
+                            numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV12, videoCodecCtx->width, videoCodecCtx->height, 1);
+                            //numBytes = av_image_get_buffer_size(destFormat, videoCodecCtx->width, videoCodecCtx->height, 1);
+                            out_buffer1 = (unsigned char *)av_malloc(numBytes * sizeof(uchar));
+                            //memset(out_buffer1, 'A', numBytes);
+
+                            av_image_copy_to_buffer(out_buffer1, numBytes,
+                                                        (const uint8_t *const *)nv12Frame->data, // const uint8_t * const src_data[4],
+                                                        (const int *)nv12Frame->linesize,        // const int src_linesize[4],
+                                                        AV_PIX_FMT_NV12,                         // enum AVPixelFormat pix_fmt, int width, int height, int align);
+                                                        nv12Frame->width, nv12Frame->height,
+                                                        1);
 
                             linesize = nv12Frame->linesize[0];
-                        }        
+                        }
+
                         //memcpy(out_buffer1, out_buffer, numBytes);
+
+                        av_frame_unref(nv12Frame);
+                        av_frame_unref(yuvFrame);
 
                         g_mutex.lock();
                         frameTupleList.push_back(make_tuple(yuvFrame->pts, out_buffer1));
@@ -489,7 +546,7 @@ void FFmpegVideo::run()
                         }
                     }
 
-                    QThread::msleep(0);
+                    QThread::msleep(1);
                 }
             }
             av_packet_unref(pkt);
@@ -567,7 +624,7 @@ void PlayVideo::run()
 
     while (!stopFlag)
     {
-        if (frameTupleList.size())
+        if (frameTupleList.size()>0)
         {
             if (useSDL)
             {
@@ -611,13 +668,11 @@ void PlayVideo::run()
 
                     SDL_GetWindowSize(win, &w, &h);
 
-
-                    (accelsType!=4);
                     // 创建显示帧
                     Uint32 pixformat = SDL_PIXELFORMAT_NV12; // SDL_PIXELFORMAT_IYUV;
                     texture = SDL_CreateTexture(renderer,
                                                 pixformat,
-                                                SDL_TEXTUREACCESS_STATIC,// SDL_TEXTUREACCESS_STATIC, SDL_TEXTUREACCESS_STREAMING SDL_TEXTUREACCESS_TARGET
+                                                SDL_TEXTUREACCESS_STREAMING,// SDL_TEXTUREACCESS_STATIC, SDL_TEXTUREACCESS_STREAMING SDL_TEXTUREACCESS_TARGET
                                                 g_videowidth,
                                                 g_videoheight);
 
@@ -672,7 +727,7 @@ void PlayVideo::run()
             // SDL_Delay(0);
             // av_packet_unref(&packet);
 
-            //SDL_PollEvent(&SDLevent);
+            SDL_PollEvent(&SDLevent);
 
             av_free(buf);
             pts_pre = pts;
@@ -690,9 +745,9 @@ void PlayVideo::run()
             int deltatime = totaltimes -( frametime*count);
             int sleepms = 1.0 * frametime - deltatime;
             if (sleepms < 0)
-                sleepms = 0;//frametime / 3;
+                sleepms = 1;//frametime / 3;
             else if (sleepms > frametime)
-                sleepms = 0;
+                sleepms = 1;
 
             g_mutex.lock();
             frameTupleList.pop_front();
@@ -706,15 +761,17 @@ void PlayVideo::run()
             bool outinfos=0;
             if( outinfos )
            {
-               qDebug("\033[36m %s sleep%2dms TotalFrames:%5d TotalTime:%6d deltaTime:%2d",
+               qDebug("\033[36m %s sleep %2dms TotalFrames:%5d TotalTime:%6d deltaTime:%2d",
                        QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*").toStdString().c_str(),
                           sleepms, count, totaltimes, deltatime);
             }
-#define LOGCOUNT 25
-             if( count % LOGCOUNT ==(LOGCOUNT-1)*0 )
+#define LOGCOUNT (25*1)
+             if(
+                     (count % LOGCOUNT == 0)
+                     )
             {
-                qDebug("\033[36m %s Render sleepms:%2d %3d PlayTime:%3d:%02d:%02d.%03d (%5d) deltaTime:%2d",
-                       QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*").toStdString().c_str(),
+                qDebug("\033[38m%s Render sleep %2dms %4d PlayTime:%3d:%02d:%02d.%03d (%5d) deltaTime:%2d",
+                       QDateTime::currentDateTime().toString("hh:mm:ss.zzz").toStdString().c_str(),
                        sleepms, count,
                        totaltimes / 60 / 60 / 1000, totaltimes / 60 / 1000 % 60, totaltimes / 1000 % 60, totaltimes % 1000, totaltimes,
                        deltatime);
