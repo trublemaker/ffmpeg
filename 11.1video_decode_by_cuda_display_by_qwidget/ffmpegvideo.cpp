@@ -16,7 +16,7 @@ using std::tuple;
 
 list<IMG> Images;
 
-list<tuple<int64_t /*pts*/, uchar * /*buffer*/>> frameTupleList;
+list<tuple<int64_t /*pts*/, AVFrame * /*buffer*/>> frameTupleList;
 
 int useSDL = 1;
 
@@ -318,7 +318,7 @@ void FFmpegVideo::run()
             if (avcodec_send_packet(videoCodecCtx, pkt) >= 0)
             {
                 if (debugstep)
-                    fprintf(stderr, " %2d %s ", debugstep + 2, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
+                    fprintf(stderr, " %2d %s ", 2, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
 
                 int ret;
                 while ((ret = avcodec_receive_frame(videoCodecCtx, yuvFrame)) >= 0)
@@ -331,8 +331,7 @@ void FFmpegVideo::run()
                         exit(1);
                     }
 
-                    if (debugstep)
-                        fprintf(stderr, " %2d %s ", debugstep + 3, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
+                    if (debugstep) fprintf(stderr, " %2d %s ", 3, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
 
                     if (AV_PIX_FMT_NONE == hw_pix_fmt)
                     {
@@ -352,6 +351,7 @@ void FFmpegVideo::run()
                             int64_t CounterStart = li.QuadPart;
 #endif
                             ret = av_hwframe_map(nv12Frame, yuvFrame, 0);
+                            if (debugstep)fprintf(stderr, " %2d %s ", 31, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
 #ifdef QT_DEBUG_HWMAP
                             QueryPerformanceCounter(&li);
                             double times = 1.0 * (li.QuadPart - CounterStart) / PCFreq;
@@ -385,11 +385,8 @@ void FFmpegVideo::run()
                             QueryPerformanceCounter(&li);
                             int64_t CounterStart = li.QuadPart;
 #endif
-
                             ret = av_hwframe_transfer_data(nv12Frame, yuvFrame, 0);
-                            if (debugstep)
-                                fprintf(stderr, " %2d %s ", debugstep + 4, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
-
+                            if (debugstep) fprintf(stderr, " %2d %s ", 32, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
 #ifdef QT_DEBUG_HWMAP
                             QueryPerformanceCounter(&li);
                             double times = 1.0 * (li.QuadPart - CounterStart) / PCFreq;
@@ -403,7 +400,6 @@ void FFmpegVideo::run()
                             AVPixelFormat f4 = AV_PIX_FMT_NV12;
                             f4 = f4;
 #endif
-
                             if ((ret) < 0)
                             {
                                 static bool outflag = false;
@@ -448,7 +444,45 @@ void FFmpegVideo::run()
                         uchar *out_buffer1 = nullptr;
                         if (AV_PIX_FMT_NONE != hw_pix_fmt)
                         {
-                            if (nv12Frame->format != AV_PIX_FMT_NV12)
+                            if ( 1 || nv12Frame->format == AV_PIX_FMT_P010LE)
+                            {
+                                //AV_PIX_FMT_NV12,   ///< planar YUV 4:2:0, 12bpp, 1 plane for Y and 1 plane for the UV components, which are interleaved (first byte U and the following byte V)
+                                //AV_PIX_FMT_P010LE, ///< like NV12, with 10bpp per component, data in the high bits, zeros in the low bits, little-endian
+
+                                if (debugstep) fprintf(stderr, " %2d %s ", 81, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
+                                //numBytes = av_image_get_buffer_size(AV_PIX_FMT_YUV420P, videoCodecCtx->width, videoCodecCtx->height, 1);
+                                //numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV12, videoCodecCtx->width, videoCodecCtx->height, 1);
+                                //numBytes = av_image_get_buffer_size(AV_PIX_FMT_P010LE, videoCodecCtx->width, videoCodecCtx->height, 1);
+
+                                if (debugstep) fprintf(stderr, " %2d %s ", 82, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
+                                destFormat =AV_PIX_FMT_P010LE;
+                                linesize = nv12Frame->linesize[0];
+
+                                AVFrame* dst_frame = av_frame_alloc();
+                                dst_frame->format = nv12Frame->format;
+                                dst_frame->width = nv12Frame->width;
+                                dst_frame->height = nv12Frame->height;
+                                dst_frame->channels = nv12Frame->channels;
+                                dst_frame->channel_layout = nv12Frame->channel_layout;
+                                dst_frame->nb_samples = nv12Frame->nb_samples;
+                                int ret = av_frame_get_buffer(dst_frame, 32);
+                                av_frame_copy(dst_frame, nv12Frame);
+                                if (debugstep) fprintf(stderr, " %2d %s ", 83, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
+                                av_frame_copy_props(dst_frame, nv12Frame);
+
+                                if (debugstep) fprintf(stderr, " %2d %s \n", 84, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
+                                fflush(stderr);
+
+                                g_mutex.lock();
+                                frameTupleList.push_back(make_tuple(yuvFrame->pts, dst_frame));
+                                g_mutex.unlock();
+
+                                av_frame_unref(nv12Frame);
+                                av_frame_unref(yuvFrame);
+
+                                QThread::msleep(1);
+                                continue;
+                            }else  if (nv12Frame->format != AV_PIX_FMT_NV12)
                             {
                                 static bool changed = false; // AV_PIX_FMT_P010LE
                                 if (!changed)
@@ -467,6 +501,9 @@ void FFmpegVideo::run()
                                     changed = true;
                                 }
 
+                                if (debugstep)
+                                    fprintf(stderr, " %2d %s ", 7, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
+
                                 //*
                                 ret = sws_scale(img_ctx,
                                                 (const uint8_t *const *)nv12Frame->data,
@@ -474,6 +511,8 @@ void FFmpegVideo::run()
                                                 0,
                                                 nv12Frame->height,
                                                 rgbFrame->data, rgbFrame->linesize);
+                                if (debugstep)
+                                    fprintf(stderr, " %2d %s ", 8, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
 
                                 if ((ret) < 0)
                                 {
@@ -505,8 +544,12 @@ void FFmpegVideo::run()
                             }
                             else
                             {
+                                //AV_PIX_FMT_NV12,   ///< planar YUV 4:2:0, 12bpp, 1 plane for Y and 1 plane for the UV components, which are interleaved (first byte U and the following byte V)
+                                //AV_PIX_FMT_P010LE, ///< like NV12, with 10bpp per component, data in the high bits, zeros in the low bits, little-endian
+
+                                numBytes = av_image_get_buffer_size(AV_PIX_FMT_P010LE, videoCodecCtx->width, videoCodecCtx->height, 1);
+                                numBytes = av_image_get_buffer_size(AV_PIX_FMT_YUV420P, videoCodecCtx->width, videoCodecCtx->height, 1);
                                 numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV12, videoCodecCtx->width, videoCodecCtx->height, 1);
-                                // numBytes = av_image_get_buffer_size(destFormat, videoCodecCtx->width, videoCodecCtx->height, 1);
                                 out_buffer1 = (unsigned char *)av_malloc(numBytes * sizeof(uchar));
                                 // memset(out_buffer1, 'A', numBytes);
 
@@ -527,10 +570,10 @@ void FFmpegVideo::run()
 
                             // if(debugstep)fprintf(stderr," %2d %s ",debugstep+5,QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str() );
                             g_mutex.lock();
-                            frameTupleList.push_back(make_tuple(yuvFrame->pts, out_buffer1));
+                            //frameTupleList.push_back(make_tuple(yuvFrame->pts, out_buffer1));
+                            av_free(out_buffer1);
                             g_mutex.unlock();
-                            if (debugstep)
-                                fprintf(stderr, " %2d %s \n", debugstep + 6, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
+                            if (debugstep) fprintf(stderr, " %2d %s \n", 9, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
                         }
                         else // AV_PIX_FMT_NONE==hw_pix_fmt do not use hw
                         {
@@ -607,9 +650,8 @@ void FFmpegVideo::run()
 
                             // if(debugstep)fprintf(stderr," %2d %s ",debugstep+5,QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str() );
                             g_mutex.lock();
-                            frameTupleList.push_back(make_tuple(yuvFrame->pts, out_buffer1));
+                            frameTupleList.push_back(make_tuple(yuvFrame->pts, yuvFrame));
                             g_mutex.unlock();
-
                         }
                     }
                     else
@@ -736,13 +778,20 @@ void PlayVideo::run()
 
     while (!stopFlag)
     {
-        if (frameTupleList.size() > 1)
+        if ( frameTupleList.size() > 0 )
         {
+            tuple<int64_t /*pts*/, AVFrame * /*buffer*/> tuple = frameTupleList.front();
+
+            int64_t pts = get<0>(tuple);
+            //uchar *buf = get<1>(tuple);
+            AVFrame *sendFrame1 = get<1>(tuple);
+
             if (useSDL)
             {
                 if (!sdl_inited)
                 {
                     sdl_inited = true;
+
                     if (0)
                     {
                         // 创建输出窗口
@@ -782,7 +831,27 @@ void PlayVideo::run()
 
                     // 创建显示帧 // YUV420P，即是SDL_PIXELFORMAT_IYUV
                     Uint32 pixformat = SDL_PIXELFORMAT_IYUV; // SDL_PIXELFORMAT_IYUV; SDL_PIXELFORMAT_NV12
-                    if(destFormat !=AV_PIX_FMT_YUV420P)pixformat =SDL_PIXELFORMAT_NV12;
+                    if(destFormat !=AV_PIX_FMT_YUV420P)
+                        pixformat =SDL_PIXELFORMAT_NV12;
+
+                    QString formatStr = av_get_pix_fmt_name((AVPixelFormat)(sendFrame1->format));
+                    qDebug() << "Format:" <<  formatStr.toUpper();
+
+                    switch (sendFrame1->format) {
+                    case AV_PIX_FMT_YUV420P:
+                        pixformat =SDL_PIXELFORMAT_IYUV;
+                        break;
+                    case AV_PIX_FMT_P010LE:
+                        pixformat =SDL_PIXELFORMAT_NV12;
+                        break;
+                    case AV_PIX_FMT_NV12:
+                        pixformat =SDL_PIXELFORMAT_NV12;
+                        break;
+                    default:
+                        pixformat =SDL_PIXELFORMAT_NV12;
+                    }
+
+                    const char *name = SDL_GetPixelFormatName(SDL_PIXELFORMAT_IYUV);
 
                     texture = SDL_CreateTexture(renderer,
                                                 pixformat,
@@ -792,22 +861,19 @@ void PlayVideo::run()
 
                     if (!texture)
                     {
-                        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create Texture!");
+                        fprintf(stderr, "Failed to create Texture!");
+                        fflush(stderr);
                         // goto __FAIL;
                     }
                 }
             }
 
-            tuple<int64_t /*pts*/, uchar * /*buffer*/> tuple = frameTupleList.front();
 
-            int64_t pts = get<0>(tuple);
-            uchar *buf = get<1>(tuple);
 
-            if (pts_pre == 0)
-                pts_pre = pts;
+            if (pts_pre == 0)  pts_pre = pts;
 
             /*
-            destFormat=AV_PIX_FMT_NV12;
+            destFormat=AV_PIX_FMT_P010LE;
             int res = av_image_fill_arrays(
                 sendFrame->data, sendFrame->linesize,
                 buf,
@@ -816,15 +882,33 @@ void PlayVideo::run()
             */
 
             // 渲染图像
-            /*
-            SDL_UpdateYUVTexture(texture, NULL,
-                sendFrame->data[0], sendFrame->linesize[0],
-                sendFrame->data[1], sendFrame->linesize[1],
-                sendFrame->data[2], sendFrame->linesize[2]);
-            */
+
+
+            //*/
+
 
             // SDL 渲染图像使用NV12格式
-            SDL_UpdateTexture(texture, NULL, buf, linesize); // sendFrame->linesize[0]);
+            //SDL_UpdateTexture(texture, NULL, buf, linesize); // sendFrame->linesize[0]);
+
+            switch (sendFrame1->format) {
+            case AV_PIX_FMT_YUV420P:
+                //pixformat =SDL_PIXELFORMAT_IYUV;
+                break;
+            case AV_PIX_FMT_P010LE:
+                // 渲染图像
+                //SDL_UpdateYUVTexture(texture, NULL,
+                //    sendFrame1->data[0], sendFrame1->linesize[0],
+                //    sendFrame1->data[1], sendFrame1->linesize[1],
+                //    sendFrame1->data[2], sendFrame1->linesize[2]);
+                //break;
+            case AV_PIX_FMT_NV12:
+                 SDL_UpdateNVTexture(texture, NULL,
+                         sendFrame1->data[0], sendFrame1->linesize[0],
+                         sendFrame1->data[1], sendFrame1->linesize[1] );
+                break;
+            //default:
+                //SDL_UpdateTexture(texture, NULL, buf, linesize); // sendFrame->linesize[0]);
+            }
 
             rect.x = 0;
             rect.y = 0;
@@ -835,7 +919,7 @@ void PlayVideo::run()
             // CounterStart=li.QuadPart;
             // qDebug()<< "Render " <<QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*") << (CounterStart-lipre)/PCFreq << pts-pts_pre ;
 
-            // SDL_RenderClear(renderer);
+            SDL_RenderClear(renderer);
             SDL_RenderCopy(renderer, texture, NULL, NULL);
             SDL_RenderPresent(renderer);
 
@@ -844,7 +928,7 @@ void PlayVideo::run()
 
             SDL_PollEvent(&SDLevent);
 
-            av_free(buf);
+            //av_free(buf);
             pts_pre = pts;
 
             QueryPerformanceCounter(&li);
@@ -867,6 +951,9 @@ void PlayVideo::run()
             g_mutex.lock();
             frameTupleList.pop_front();
             g_mutex.unlock();
+
+            av_frame_unref(sendFrame1);
+            av_frame_free(&sendFrame1);
 
             ::Sleep(sleepms);
             //::WaitForSingleObject()
