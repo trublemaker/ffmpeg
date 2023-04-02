@@ -314,6 +314,10 @@ void FFmpegVideo::run()
     QueryPerformanceCounter(&li);
     int64_t CounterStart = li.QuadPart;
 
+    bool useHWDecodeFlag = true;
+
+    //useHWDecodeFlag = (AV_PIX_FMT_NONE != hw_pix_fmt );//&& yuvFrame->format == videoCodecCtx->pix_fmt);
+
     if (!openFlag)
     {
         open_input_file();
@@ -454,7 +458,7 @@ void FFmpegVideo::run()
                     if (useSDL)
                     {
                         uchar *out_buffer1 = nullptr;
-                        if (AV_PIX_FMT_NONE != hw_pix_fmt)
+                        //if (AV_PIX_FMT_NONE != hw_pix_fmt)
                         {
                             if ( 1 || nv12Frame->format == AV_PIX_FMT_P010LE)
                             {
@@ -471,16 +475,24 @@ void FFmpegVideo::run()
                                 linesize = nv12Frame->linesize[0];
 
                                 AVFrame* dst_frame = av_frame_alloc();
-                                dst_frame->format = nv12Frame->format;
-                                dst_frame->width = nv12Frame->width;
-                                dst_frame->height = nv12Frame->height;
-                                dst_frame->channels = nv12Frame->channels;
-                                dst_frame->channel_layout = nv12Frame->channel_layout;
-                                dst_frame->nb_samples = nv12Frame->nb_samples;
-                                int ret = av_frame_get_buffer(dst_frame, 32);
-                                av_frame_copy(dst_frame, nv12Frame);
+                                AVFrame* src_frame;
+
+                                if(AV_PIX_FMT_NONE == hw_pix_fmt ){
+                                    src_frame = yuvFrame;
+                                }else{
+                                    src_frame = nv12Frame;
+                                }
+                                dst_frame->format = src_frame->format;
+                                dst_frame->width = src_frame->width;
+                                dst_frame->height = src_frame->height;
+                                dst_frame->channels = src_frame->channels;
+                                dst_frame->channel_layout = src_frame->channel_layout;
+                                dst_frame->nb_samples = src_frame->nb_samples;
+                                int ret = av_frame_get_buffer(dst_frame, 0);
+
+                                av_frame_copy(dst_frame, src_frame);
                                 if (debugstep) fprintf(stderr, " %2d %s ", 83, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
-                                av_frame_copy_props(dst_frame, nv12Frame);
+                                av_frame_copy_props(dst_frame, src_frame);
 
                                 if (debugstep) fprintf(stderr, " %2d %s \n", 84, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
                                 fflush(stderr);
@@ -492,7 +504,7 @@ void FFmpegVideo::run()
                                 av_frame_unref(nv12Frame);
                                 av_frame_unref(yuvFrame);
 
-                                QThread::msleep(1);
+                                QThread::msleep(0);
                                 continue;
                             }else  if (nv12Frame->format != AV_PIX_FMT_NV12)
                             {
@@ -587,7 +599,7 @@ void FFmpegVideo::run()
                             g_mutex.unlock();
                             if (debugstep) fprintf(stderr, " %2d %s \n", 9, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
                         }
-                        else // AV_PIX_FMT_NONE==hw_pix_fmt do not use hw
+                        //else // AV_PIX_FMT_NONE==hw_pix_fmt do not use hw
                         {
                             static bool changed = false; // AV_PIX_FMT_P010LE
                             if (!changed && AV_PIX_FMT_YUV420P !=yuvFrame->format )
@@ -853,6 +865,9 @@ void PlayVideo::run()
                     case AV_PIX_FMT_YUV420P:
                         pixformat =SDL_PIXELFORMAT_IYUV;
                         break;
+                    case AV_PIX_FMT_YUV420P10LE:
+                        pixformat =SDL_PIXELFORMAT_IYUV;
+                        break;
                     case AV_PIX_FMT_P010LE:
                         pixformat =SDL_PIXELFORMAT_NV12;
                         break;
@@ -904,7 +919,12 @@ void PlayVideo::run()
 
             switch (sendFrame1->format) {
             case AV_PIX_FMT_YUV420P:
+            case AV_PIX_FMT_YUV420P10LE:
                 //pixformat =SDL_PIXELFORMAT_IYUV;
+                SDL_UpdateYUVTexture(texture, NULL,
+                    sendFrame1->data[0], sendFrame1->linesize[0],
+                    sendFrame1->data[1], sendFrame1->linesize[1],
+                    sendFrame1->data[2], sendFrame1->linesize[2]);
                 break;
             case AV_PIX_FMT_P010LE:
                 // 渲染图像
