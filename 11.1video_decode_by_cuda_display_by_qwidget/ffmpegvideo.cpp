@@ -238,6 +238,7 @@ int FFmpegVideo::open_input_file()
     //  av_dict_set_int(&captureOptions, "rtbufsize",  3*1024*1024, 0);
     // av_dict_set(&captureOptions, "video_size", "1280X680", 0);
     av_dict_set(&captureOptions, "stimeout", "10", 0);
+    av_dict_set(&captureOptions, "threads", "auto", 0);
     // av_dict_set(&captureOptions, "framerate", "30", 0);//设置帧数 作者：落天尘心 https://www.bilibili.com/read/cv17801080 出处：bilibili
 
     if ((ret = avcodec_open2(videoCodecCtx, videoCodec, &captureOptions)) < 0)
@@ -927,7 +928,6 @@ void PlayVideo::run()
                     sendFrame1->data[2], sendFrame1->linesize[2]);
                 break;
             case AV_PIX_FMT_P010LE:
-                // 渲染图像
                 //SDL_UpdateYUVTexture(texture, NULL,
                 //    sendFrame1->data[0], sendFrame1->linesize[0],
                 //    sendFrame1->data[1], sendFrame1->linesize[1],
