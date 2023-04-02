@@ -1,6 +1,8 @@
 #include "ffmpegvideo.h"
 
 #include <QDateTime>
+#include <QApplication>
+#include <QMainWindow>
 
 #include <Windows.h>
 #include <SDL.h>
@@ -155,6 +157,16 @@ int FFmpegVideo::open_input_file()
     {
         return -1;
     }
+
+    const QWidgetList &list = QApplication::topLevelWidgets();
+
+        for(QWidget * w : list){
+            QMainWindow *mainWindow = qobject_cast<QMainWindow*>(w);
+            if(mainWindow){
+                mainWindow->setWindowTitle(QCoreApplication::translate(_filePath.toLocal8Bit().data(), _filePath.toLocal8Bit().data(), nullptr));
+                qDebug() << "MainWindow found" << w;
+            }
+        }
 
     if (avformat_find_stream_info(fmtCtx, NULL) < 0)
     {
