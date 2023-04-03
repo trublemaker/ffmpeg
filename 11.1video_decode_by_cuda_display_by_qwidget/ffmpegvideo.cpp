@@ -11,6 +11,8 @@
 #include <thread>
 #include <vector>
 
+#include <omp.h>
+
 std::mutex g_mutex;
 
 #include <tuple>
@@ -91,9 +93,10 @@ AVPixelFormat FFmpegVideo::get_hw_format(AVCodecContext *ctx, const AVPixelForma
 
     for (p = pix_fmts; *p != -1; p++)
     {
-        qDebug() << "Compare:" << av_get_pix_fmt_name(*p);
-        if (*p == hw_pix_fmt)
+        qDebug() << "Compare:" << av_get_pix_fmt_name(*p) << *p;
+        if (*p == hw_pix_fmt||*p==0)
         {
+            hw_pix_fmt = *p;
             qDebug("use hw format: %s[%s]", av_get_pix_fmt_name(*p), av_get_pix_fmt_name(hw_pix_fmt));
             return *p;
         }
@@ -396,7 +399,8 @@ void FFmpegVideo::run()
                             }
                         }
 
-                        if (!hwframe_mapok)
+                        static bool hw_transfer_flag = true;
+                        if (!hwframe_mapok && hw_transfer_flag )
                         {
 #ifdef QT_DEBUG_HWMAP
                             QueryPerformanceCounter(&li);
@@ -419,9 +423,8 @@ void FFmpegVideo::run()
 #endif
                             if ((ret) < 0)
                             {
+                                hw_transfer_flag  = false;
                                 static bool outflag = false;
-                                // av_frame_unref(nv12Frame);
-                                // av_frame_unref(yuvFrame);
                                 if (!outflag)
                                 {
                                     char buf[256] = {0};
@@ -429,8 +432,7 @@ void FFmpegVideo::run()
                                     qCritical() << "av_hwframe_transfer_data error: " << buf << nv12Frame->format;
                                     outflag = true;
                                 }
-                                if (nv12Frame->format == AV_PIX_FMT_NONE)
-                                    continue;
+                                //if (nv12Frame->format == AV_PIX_FMT_NONE)  continue;
                             }
                         }
                     }
@@ -478,7 +480,7 @@ void FFmpegVideo::run()
                                 AVFrame* dst_frame = av_frame_alloc();
                                 AVFrame* src_frame;
 
-                                if(AV_PIX_FMT_NONE == hw_pix_fmt ){
+                                if(AV_PIX_FMT_NONE == hw_pix_fmt || AV_PIX_FMT_YUV420P == hw_pix_fmt || nv12Frame->format == -1 ){
                                     src_frame = yuvFrame;
                                 }else{
                                     src_frame = nv12Frame;
@@ -758,11 +760,179 @@ void FFmpegVideo::run()
     qDebug() << "Thread stop now " << __FUNCTION__;
 }
 
+static int ConvertP010toNV21(AVFrame* pFrame){
+    int width,height;
+
+    width = pFrame->width;
+    height = pFrame->height;
+
+    for (int i = 0; i < height; ++i) {
+        uint16_t *pu16YData = (uint16_t *)(pFrame->data[0] + pFrame->width * 2 * i);//每一行的起始位置
+        uint8_t  *pu8YData = pFrame->data[0] + pFrame->width * i;
+        for (int j = 0; j < width; j++, pu8YData++, pu16YData++) {
+            *pu8YData = (uint8_t)(*pu16YData >> 8);   //Y 分量向右移位（移 8 位）
+        }
+    }
+
+    width /= 2; height /= 2;
+    for (int i = 0; i < height; ++i) {
+        uint16_t *pu16UVData = (uint16_t *)(pFrame->data[1] + pFrame->width * 2 * i);//每一行的起始位置
+        uint8_t  *pu8UVData = pFrame->data[1] + pFrame->width * i;
+        for (int j = 0; j < width; ++j, pu8UVData+=2, pu16UVData+=2) {
+            *pu8UVData = *pu16UVData >> 8;             //V 分量向右移位（移 8 位）
+            *(pu8UVData + 1) = *(pu16UVData + 1) >> 8; //U 分量向右移位（移 8 位）
+        }
+    }
+
+    return 0;
+}
+
+static int ConvertP010toNV12(AVFrame* p010Frame,AVFrame* nv12Frame){
+    uint8_t* p010_src[2];
+    p010_src[0] = p010Frame->data[0];
+    p010_src[1] = p010Frame->data[1];//p010_src[0] + frameWidth * frameHeight * 2;
+
+    uint8_t* nv12_dst[3];
+    nv12_dst[0] = nv12Frame->data[0];
+    nv12_dst[1] = nv12Frame->data[1];
+    //yuv420_dst[2] = nv12Frame->data[2];
+    uint16_t Y, U, V;
+
+    //yuvFrame->format = p010Frame->format;
+    nv12Frame->width = p010Frame->width;
+    nv12Frame->height = p010Frame->height;
+    //yuvFrame->channels = p010Frame->channels;
+    ///yuvFrame->channel_layout = p010Frame->channel_layout;
+    //yuvFrame->nb_samples = p010Frame->nb_samples;
+
+//#pragma omp parallel sections
+    {
+    //Y
+//#pragma omp section
+    for (int i = 0; i < p010Frame->width * p010Frame->height; i++) {
+        Y = *((uint16_t*)p010_src[0] + i) >> 6;
+        Y = Y < 64 ? 64 : Y;
+        Y = Y > 940 ? 940 : Y;
+        *(nv12_dst[0]++) = (uint8_t)(Y >> 2);
+    }
+
+    //UV
+//#pragma omp section
+    for (int i = 0; i < p010Frame->width * p010Frame->height / 2; i++) {
+        if (i % 2 == 0) {
+            U = (*((uint16_t*)p010_src[1] + i)) & 0x00ff;
+            *(nv12_dst[1]++) = U;
+        }
+        else {
+           // V = (*((uint16_t*)p010_src[1] + i)) & 0x00ff;
+            //*(yuv420_dst[2]++) = V;
+        }
+    }
+}
+    return 0;
+}
+
+static int ConvertP010toYUV420P(AVFrame* p010Frame,AVFrame* yuvFrame){
+    uint8_t* p010_src[2];
+    p010_src[0] = p010Frame->data[0];
+    p010_src[1] = p010Frame->data[1];//p010_src[0] + frameWidth * frameHeight * 2;
+
+    uint8_t* yuv420_dst[3];
+    yuv420_dst[0] = yuvFrame->data[0];
+    yuv420_dst[1] = yuvFrame->data[1];
+    yuv420_dst[2] = yuvFrame->data[2];
+    uint16_t Y, U, V;
+
+    //yuvFrame->format = p010Frame->format;
+    yuvFrame->width = p010Frame->width;
+    yuvFrame->height = p010Frame->height;
+    //yuvFrame->channels = p010Frame->channels;
+    ///yuvFrame->channel_layout = p010Frame->channel_layout;
+    //yuvFrame->nb_samples = p010Frame->nb_samples;
+
+#pragma omp parallel sections
+    {
+    //Y
+#pragma omp section
+    for (int i = 0; i < p010Frame->width * p010Frame->height; i++) {
+        Y = *((uint16_t*)p010_src[0] + i) >> 6;
+        Y = Y < 64 ? 64 : Y;
+        Y = Y > 940 ? 940 : Y;
+        *(yuv420_dst[0]++) = (uint8_t)(Y >> 2);
+    }
+
+    //UV
+#pragma omp section
+    for (int i = 0; i < p010Frame->width * p010Frame->height / 2; i++) {
+        if (i % 2 == 0) {
+            U = (*((uint16_t*)p010_src[1] + i)) & 0x00ff;
+            *(yuv420_dst[1]++) = U;
+        }
+        else {
+            V = (*((uint16_t*)p010_src[1] + i)) & 0x00ff;
+            *(yuv420_dst[2]++) = V;
+        }
+    }
+}
+    return 0;
+}
+
+static int ConvertYUV420P10LEtoYUV420P(AVFrame* p010Frame,AVFrame* yuvFrame){
+    uint8_t* p010_src[2];
+    p010_src[0] = p010Frame->data[0];
+    p010_src[1] = p010Frame->data[1];//p010_src[0] + frameWidth * frameHeight * 2;
+    p010_src[2] = p010Frame->data[2];
+
+    uint8_t* yuv420_dst[3];
+    yuv420_dst[0] = yuvFrame->data[0];
+    yuv420_dst[1] = yuvFrame->data[1];
+    yuv420_dst[2] = yuvFrame->data[2];
+
+    uint16_t Y, U, V;
+
+    //yuvFrame->format = p010Frame->format;
+    yuvFrame->width = p010Frame->width;
+    yuvFrame->height = p010Frame->height;
+    //yuvFrame->channels = p010Frame->channels;
+    ///yuvFrame->channel_layout = p010Frame->channel_layout;
+    //yuvFrame->nb_samples = p010Frame->nb_samples;
+
+    int numBytess = av_image_get_buffer_size(AV_PIX_FMT_YUV420P10LE, yuvFrame->width, yuvFrame->height, 1);
+    int numBytesd = av_image_get_buffer_size(AV_PIX_FMT_YUV420P, yuvFrame->width, yuvFrame->height, 1);
+    omp_set_num_threads(4);
+//*
+#pragma omp parallel for
+    for(int i = 0 ; i < numBytesd; i ++ ){
+        Y = *((uint16_t*)p010_src[0] + i) >> 2;
+        *(yuv420_dst[0]++) = (uint8_t)(Y);
+    }
+    if(1) return 0;
+//*/
+
+#pragma omp parallel sections
+    {
+    //Y
+#pragma omp section
+    for (int i = 0; i < p010Frame->width * p010Frame->height; i++) {
+        Y = *((uint16_t*)p010_src[0] + i) >>2;//>> 6;//>> 6;
+        *(yuv420_dst[0]++) = (uint8_t)(Y );
+    }
+    //UV
+#pragma omp section
+    for (int i = 0; i < p010Frame->width * p010Frame->height / 2; i++) {
+        U = (*((uint16_t*)p010_src[1] + i)) >>2 ;
+        *(yuv420_dst[1]++) =(uint8_t) U;
+    }
+}
+    return 0;
+}
+
 void PlayVideo::run()
 {
     int frametime = 40; // ms
     double PCFreq = 0.0;
     LARGE_INTEGER freq;
+    struct SwsContext *img_ctx=NULL;
 
     LARGE_INTEGER li;
     if (!QueryPerformanceFrequency(&li))
@@ -867,10 +1037,10 @@ void PlayVideo::run()
                         pixformat =SDL_PIXELFORMAT_IYUV;
                         break;
                     case AV_PIX_FMT_YUV420P10LE:
-                        pixformat =SDL_PIXELFORMAT_IYUV;
+                        pixformat =SDL_PIXELFORMAT_IYUV;//Convert to AV_PIX_FMT_YUV420P
                         break;
                     case AV_PIX_FMT_P010LE:
-                        pixformat =SDL_PIXELFORMAT_NV12;
+                        pixformat =SDL_PIXELFORMAT_IYUV;
                         break;
                     case AV_PIX_FMT_NV12:
                         pixformat =SDL_PIXELFORMAT_NV12;
@@ -879,60 +1049,123 @@ void PlayVideo::run()
                         pixformat =SDL_PIXELFORMAT_NV12;
                     }
 
-                    const char *name = SDL_GetPixelFormatName(SDL_PIXELFORMAT_IYUV);
+                    const char *name = SDL_GetPixelFormatName(pixformat);
 
                     texture = SDL_CreateTexture(renderer,
                                                 pixformat,
                                                 SDL_TEXTUREACCESS_STREAMING, // SDL_TEXTUREACCESS_STATIC, SDL_TEXTUREACCESS_STREAMING SDL_TEXTUREACCESS_TARGET
-                                                g_videowidth,
-                                                g_videoheight);
+                                                sendFrame1->width,
+                                                sendFrame1->height);
 
-                    if (!texture)
-                    {
-                        fprintf(stderr, "Failed to create Texture!");
+                    if (!texture){
+                        qDebug("Failed to create Texture %s %d*%d! Exit Thread!",name,g_videowidth,g_videoheight);
+                        fprintf(stderr, "Failed to create Texture %s! Exit Thread!",name);
                         fflush(stderr);
-                        // goto __FAIL;
+                        return; // goto __FAIL;
                     }
                 }
             }
 
-
-
             if (pts_pre == 0)  pts_pre = pts;
-
-            /*
-            destFormat=AV_PIX_FMT_P010LE;
-            int res = av_image_fill_arrays(
-                sendFrame->data, sendFrame->linesize,
-                buf,
-                destFormat,
-                sendFrame->width, sendFrame->height, 1);
-            */
-
-            // 渲染图像
-
-
-            //*/
-
 
             // SDL 渲染图像使用NV12格式
             //SDL_UpdateTexture(texture, NULL, buf, linesize); // sendFrame->linesize[0]);
 
             switch (sendFrame1->format) {
             case AV_PIX_FMT_YUV420P:
-            case AV_PIX_FMT_YUV420P10LE:
-                //pixformat =SDL_PIXELFORMAT_IYUV;
                 SDL_UpdateYUVTexture(texture, NULL,
                     sendFrame1->data[0], sendFrame1->linesize[0],
                     sendFrame1->data[1], sendFrame1->linesize[1],
-                    sendFrame1->data[2], sendFrame1->linesize[2]);
+                    sendFrame1->data[2], sendFrame1->linesize[2]
+                        );
+                break;
+            case AV_PIX_FMT_YUV420P10LE:
+            {
+                //pixformat =SDL_PIXELFORMAT_IYUV;
+                /*ret = sws_scale(img_ctx,
+                                (const uint8_t *const *)sendFrame1->data,
+                                (const int *)sendFrame1->linesize,
+                                0,
+                                sendFrame1->height,
+                                rgbFrame->data, rgbFrame->linesize);
+                */ //AV_PIX_FMT_NV12  AV_PIX_FMT_YUV420P
+                AV_PIX_FMT_YUV420P ;AV_PIX_FMT_NV12 ;
+                int numBytes = av_image_get_buffer_size(AV_PIX_FMT_YUV420P10LE, sendFrame1->width, sendFrame1->height, 1);
+                numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV12, sendFrame1->width, sendFrame1->height, 1);
+                numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV21, sendFrame1->width, sendFrame1->height, 1);
+                numBytes = av_image_get_buffer_size(AV_PIX_FMT_YUV420P, sendFrame1->width, sendFrame1->height, 1);
+
+                static unsigned char *out_buffer = nullptr;
+
+                if(!out_buffer)
+                    out_buffer = (unsigned char *)av_malloc(numBytes * sizeof(uchar));
+
+                AVFrame * yuvFrame = av_frame_alloc();
+
+                int res = av_image_fill_arrays(
+                    yuvFrame->data, yuvFrame->linesize,
+                    out_buffer,
+                    AV_PIX_FMT_YUV420P,
+                    sendFrame1->width, sendFrame1->height, 1);
+
+                if (res < 0)
+                {
+                    qDebug() << "Fill arrays failed.";
+                    return ;
+                }
+
+                ConvertYUV420P10LEtoYUV420P(sendFrame1,yuvFrame);
+                SDL_UpdateYUVTexture(texture, NULL,
+                    yuvFrame->data[0], yuvFrame->linesize[0],
+                    yuvFrame->data[1], yuvFrame->linesize[1],
+                    yuvFrame->data[2], yuvFrame->linesize[2]
+                        );
+
+                av_frame_unref(yuvFrame);
+                //av_frame_free()
+             }
                 break;
             case AV_PIX_FMT_P010LE:
-                //SDL_UpdateYUVTexture(texture, NULL,
-                //    sendFrame1->data[0], sendFrame1->linesize[0],
-                //    sendFrame1->data[1], sendFrame1->linesize[1],
-                //    sendFrame1->data[2], sendFrame1->linesize[2]);
-                //break;
+            {
+                //pixformat =SDL_PIXELFORMAT_IYUV;
+                /*ret = sws_scale(img_ctx,
+                                (const uint8_t *const *)sendFrame1->data,
+                                (const int *)sendFrame1->linesize,
+                                0,
+                                sendFrame1->height,
+                                rgbFrame->data, rgbFrame->linesize);
+                */ //AV_PIX_FMT_NV12  AV_PIX_FMT_YUV420P
+                AV_PIX_FMT_YUV420P ;AV_PIX_FMT_NV12 ;
+                int numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV12, sendFrame1->width, sendFrame1->height, 1);
+                static unsigned char *out_buffer = nullptr;
+
+                if(!out_buffer)
+                    out_buffer = (unsigned char *)av_malloc(numBytes * sizeof(uchar));
+
+                AVFrame * yuvFrame = av_frame_alloc();
+
+                int res = av_image_fill_arrays(
+                    yuvFrame->data, yuvFrame->linesize,
+                    out_buffer,
+                    AV_PIX_FMT_NV12,
+                    sendFrame1->width, sendFrame1->height, 1);
+
+                if (res < 0)
+                {
+                    qDebug() << "Fill arrays failed.";
+                    return ;
+                }
+
+                ConvertP010toYUV420P(sendFrame1,yuvFrame);
+                SDL_UpdateYUVTexture(texture, NULL,
+                        yuvFrame->data[0], yuvFrame->linesize[0],
+                        yuvFrame->data[1], yuvFrame->linesize[1],
+                        yuvFrame->data[2], yuvFrame->linesize[2]);
+
+                av_frame_unref(yuvFrame);
+                //av_frame_free()
+             }
+                break;
             case AV_PIX_FMT_NV12:
                  SDL_UpdateNVTexture(texture, NULL,
                          sendFrame1->data[0], sendFrame1->linesize[0],
