@@ -842,10 +842,10 @@ static int ConvertP010toNV12(AVFrame* p010Frame,AVFrame* nv12Frame){
 }
 
 static int ConvertYUV420P10LEtoYUV420P(AVFrame* p010Frame,AVFrame* yuvFrame){
-    uint8_t* p010_src[2];
-    p010_src[0] = p010Frame->data[0];
-    p010_src[1] = p010Frame->data[1];//p010_src[0] + frameWidth * frameHeight * 2;
-    p010_src[2] = p010Frame->data[2];
+    uint16_t* p010_src[2];
+    p010_src[0] = (uint16_t*)p010Frame->data[0];
+    p010_src[1] = (uint16_t*)p010Frame->data[1];
+    p010_src[2] = (uint16_t*)p010Frame->data[2];
 
     uint8_t* yuv420_dst[3];
     yuv420_dst[0] = yuvFrame->data[0];
@@ -861,11 +861,10 @@ static int ConvertYUV420P10LEtoYUV420P(AVFrame* p010Frame,AVFrame* yuvFrame){
     ///yuvFrame->channel_layout = p010Frame->channel_layout;
     //yuvFrame->nb_samples = p010Frame->nb_samples;
 
-    int numBytess = av_image_get_buffer_size(AV_PIX_FMT_YUV420P10LE, yuvFrame->width, yuvFrame->height, 1);
-    int numBytesd = av_image_get_buffer_size(AV_PIX_FMT_YUV420P, yuvFrame->width, yuvFrame->height, 1);
-    omp_set_num_threads(4);
 //*
     if(0){
+        int numBytess = av_image_get_buffer_size(AV_PIX_FMT_YUV420P10LE, yuvFrame->width, yuvFrame->height, 1);
+        int numBytesd = av_image_get_buffer_size(AV_PIX_FMT_YUV420P, yuvFrame->width, yuvFrame->height, 1);
 #pragma omp parallel for
     for(int i = 0 ; i < numBytesd; i ++ ){
         Y = *((uint16_t*)p010_src[0] + i) >> 2;
@@ -880,13 +879,13 @@ static int ConvertYUV420P10LEtoYUV420P(AVFrame* p010Frame,AVFrame* yuvFrame){
     //Y
 #pragma omp section
     for (int i = 0; i < p010Frame->width * p010Frame->height; i++) {
-        Y = *((uint16_t*)p010_src[0] + i) >>2;//>> 6;//>> 6;
-        *(yuv420_dst[0]++) = (uint8_t)(Y );
+        Y = *(p010_src[0] ++) >>2;
+        *(yuv420_dst[0]++) = (uint8_t)Y;
     }
     //UV
 #pragma omp section
     for (int i = 0; i < p010Frame->width * p010Frame->height / 2; i++) {
-        U = (*((uint16_t*)p010_src[1] + i)) >>2 ;
+        U = *(p010_src[1] ++) >>2;
         *(yuv420_dst[1]++) =(uint8_t) U;
     }
 }
@@ -936,6 +935,12 @@ void PlayVideo::run()
 
     int w, h;
     SDL_Rect rect;
+
+    w = omp_get_num_procs();
+    omp_set_num_threads(w);
+
+    static unsigned char *out_buffer = nullptr;
+    AVFrame * yuvFrame = av_frame_alloc();
 
     while (!stopFlag)
     {
@@ -1048,29 +1053,22 @@ void PlayVideo::run()
             case AV_PIX_FMT_YUV420P10LE:
             {
                 AV_PIX_FMT_YUV420P ;AV_PIX_FMT_NV12 ;
-                int numBytes = av_image_get_buffer_size(AV_PIX_FMT_YUV420P10LE, sendFrame1->width, sendFrame1->height, 1);
-                numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV12, sendFrame1->width, sendFrame1->height, 1);
-                numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV21, sendFrame1->width, sendFrame1->height, 1);
-                numBytes = av_image_get_buffer_size(AV_PIX_FMT_YUV420P, sendFrame1->width, sendFrame1->height, 1);
+                static int numBytes = av_image_get_buffer_size(AV_PIX_FMT_YUV420P, sendFrame1->width, sendFrame1->height, 1);
 
-                static unsigned char *out_buffer = nullptr;
+                if(!out_buffer)  out_buffer = (unsigned char *)av_malloc(numBytes * sizeof(uchar));
 
-                if(!out_buffer)
-                    out_buffer = (unsigned char *)av_malloc(numBytes * sizeof(uchar));
+                int res1 = -1235 ;
+                    res1 = av_image_fill_arrays(
+                        yuvFrame->data, yuvFrame->linesize,
+                        out_buffer,
+                        AV_PIX_FMT_YUV420P,
+                        sendFrame1->width, sendFrame1->height, 1);
 
-                AVFrame * yuvFrame = av_frame_alloc();
-
-                int res = av_image_fill_arrays(
-                    yuvFrame->data, yuvFrame->linesize,
-                    out_buffer,
-                    AV_PIX_FMT_YUV420P,
-                    sendFrame1->width, sendFrame1->height, 1);
-
-                if (res < 0)
-                {
-                    qDebug() << "Fill arrays failed.";
-                    return ;
-                }
+                    if (res1 < 0)
+                    {
+                        qDebug() << "Fill arrays failed.";
+                        return ;
+                    }
 
                 ConvertYUV420P10LEtoYUV420P(sendFrame1,yuvFrame);
                 SDL_UpdateYUVTexture(texture, NULL,
@@ -1087,24 +1085,18 @@ void PlayVideo::run()
             {
                 AV_PIX_FMT_YUV420P ;AV_PIX_FMT_NV12 ;
                 int numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV12, sendFrame1->width, sendFrame1->height, 1);
-                static unsigned char *out_buffer = nullptr;
+                static int res = -1235 ;
+                    res = av_image_fill_arrays(
+                        yuvFrame->data, yuvFrame->linesize,
+                        out_buffer,
+                        AV_PIX_FMT_NV12,
+                        sendFrame1->width, sendFrame1->height, 1);
 
-                if(!out_buffer)
-                    out_buffer = (unsigned char *)av_malloc(numBytes * sizeof(uchar));
-
-                AVFrame * yuvFrame = av_frame_alloc();
-
-                int res = av_image_fill_arrays(
-                    yuvFrame->data, yuvFrame->linesize,
-                    out_buffer,
-                    AV_PIX_FMT_NV12,
-                    sendFrame1->width, sendFrame1->height, 1);
-
-                if (res < 0)
-                {
-                    qDebug() << "Fill arrays failed.";
-                    return ;
-                }
+                    if (res < 0)
+                    {
+                        qDebug() << "Fill arrays failed.";
+                        return ;
+                    }
 
                 ConvertP010toNV12(sendFrame1,yuvFrame);
                 SDL_UpdateNVTexture(texture, NULL,
@@ -1181,7 +1173,7 @@ void PlayVideo::run()
                        QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*").toStdString().c_str(),
                        sleepms, count, totaltimes, deltatime);
             }
-#define LOGCOUNT (25 * 1)
+#define LOGCOUNT (25 * 10)
             if (0 ||
                 (count % LOGCOUNT == 0))
             {
