@@ -792,7 +792,7 @@ static int ConvertP010toNV12(AVFrame* p010Frame,AVFrame* nv12Frame){
     p010_src[0] = p010Frame->data[0];
     p010_src[1] = p010Frame->data[1];
 
-    uint8_t* nv12_dst[3];
+    uint8_t* nv12_dst[2];
     nv12_dst[0] = nv12Frame->data[0];
     nv12_dst[1] = nv12Frame->data[1];
 
@@ -811,12 +811,10 @@ static int ConvertP010toNV12(AVFrame* p010Frame,AVFrame* nv12Frame){
     //       numBytesd, nv12Frame->width, nv12Frame->height,nv12Frame->width*nv12Frame->height,
     //       nv12Frame->data[1]-nv12Frame->data[0]);
 
-    omp_set_num_threads(4);
-
-    if(0){
+    if(1){
 #pragma omp parallel for
         for (int i = 0; i < numBytesd; i++) {
-            nv12_dst[0][i] = p010_src[0][i*2+1];
+            *(nv12_dst[0]++) = p010_src[0][i*2+1];
         }
         if(1) return 0;
     }
@@ -937,7 +935,7 @@ void PlayVideo::run()
     SDL_Rect rect;
 
     w = omp_get_num_procs();
-    omp_set_num_threads(w);
+    omp_set_num_threads(min(w,6));
 
     static unsigned char *out_buffer = nullptr;
     AVFrame * yuvFrame = av_frame_alloc();
@@ -1085,6 +1083,7 @@ void PlayVideo::run()
             {
                 AV_PIX_FMT_YUV420P ;AV_PIX_FMT_NV12 ;
                 int numBytes = av_image_get_buffer_size(AV_PIX_FMT_NV12, sendFrame1->width, sendFrame1->height, 1);
+                if(!out_buffer)  out_buffer = (unsigned char *)av_malloc(numBytes * sizeof(uchar));
                 static int res = -1235 ;
                     res = av_image_fill_arrays(
                         yuvFrame->data, yuvFrame->linesize,
