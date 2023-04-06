@@ -26,28 +26,21 @@ extern "C"{
 
 int main()
 {
-    QString _url1="http://jnkh.vicp.net:4000/rtp/239.93.0.184:5140";
-    QString _url="http://192.168.1.26:7088/rtp/239.93.0.97:5140";
+    QString _url1="http://jnkh.vicp.net:4000/rtp/239.93.0.43:5140";//4k
+    QString _url2="http://192.168.7.1:7088/rtp/239.93.1.156:5140"; //4k
+    QString _url3="http://192.168.7.1:7088/rtp/239.93.0.66:5140";  //1080p CCTV13
+
+    QString _url = _url2;
 
     QAudioOutput *audioOutput;
     QIODevice *streamOut;
 
     QAudioFormat audioFmt;
-    audioFmt.setSampleRate(44100);
-    audioFmt.setChannelCount(2);
-    audioFmt.setSampleSize(16);
+    //audioFmt.setSampleRate(48000);
+    //audioFmt.setChannelCount(2);
+    //audioFmt.setSampleSize(16);
     audioFmt.setCodec("audio/pcm");
     audioFmt.setByteOrder(QAudioFormat::LittleEndian);
-    audioFmt.setSampleType(QAudioFormat::SignedInt);
-
-    QAudioDeviceInfo info = QAudioDeviceInfo::defaultOutputDevice();
-    if(!info.isFormatSupported(audioFmt)){
-        audioFmt = info.nearestFormat(audioFmt);
-    }
-    audioOutput = new QAudioOutput(audioFmt);
-    audioOutput->setVolume(100);
-
-    streamOut = audioOutput->start();
 
     AVFormatContext *fmtCtx =avformat_alloc_context();
     AVCodecContext *codecCtx = NULL;
@@ -97,9 +90,25 @@ int main()
             return -1;
         }
 
+        qDebug()<<codec->name;
+
+        audioFmt.setSampleRate(codecCtx->sample_rate);
+        audioFmt.setChannelCount(codecCtx->channels);
+        audioFmt.setSampleSize(16);
+        audioFmt.setSampleType(QAudioFormat::SignedInt); QAudioFormat::SignedInt; //Float
+
+        QAudioDeviceInfo info = QAudioDeviceInfo::defaultOutputDevice();
+        if(!info.isFormatSupported(audioFmt)){
+            audioFmt = info.nearestFormat(audioFmt);
+        }
+        audioOutput = new QAudioOutput(audioFmt);
+        audioOutput->setVolume(1.0);
+
+        streamOut = audioOutput->start();
+
         //设置转码参数
         uint64_t out_channel_layout = codecCtx->channel_layout;
-        enum AVSampleFormat out_sample_fmt = AV_SAMPLE_FMT_S16;
+        enum AVSampleFormat out_sample_fmt =  AV_SAMPLE_FMT_S16;AV_SAMPLE_FMT_FLTP;//AV_SAMPLE_FMT_S16;
         int out_sample_rate = codecCtx->sample_rate;
         int out_channels = av_get_channel_layout_nb_channels(out_channel_layout);
         //printf("out rate : %d , out_channel is: %d\n",out_sample_rate,out_channels);
@@ -114,7 +123,7 @@ int main()
                                                  codecCtx->sample_fmt,
                                                  codecCtx->sample_rate,
                                                  0,NULL);
-        swr_init(swr_ctx);
+        int ret = swr_init(swr_ctx);
 
         double sleep_time=0;
 

@@ -1,4 +1,4 @@
-QT       += core gui
+QT       += core gui multimedia testlib
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -13,8 +13,9 @@ CONFIG += c++11
 # windows平台
 win32{
 INCLUDEPATH += C:\Qt\ffmpeg-6.0\include  C:\Qt\SDL2\include
-LIBS += -LC:\Qt\ffmpeg-6.0/lib \
+LIBS += -LC:\Qt\ffmpeg-6.0\lib \
         -L"C:\Program Files (x86)\Windows Kits\10\Lib\10.0.19041.0\um\x64" \
+        -L"C:\Program Files (x86)\Windows Kits\8.1\Lib\winv6.3\um\x64" \
         -LC:\Qt\SDL2\lib\x64 \
         -lavcodec \
         -lavdevice \

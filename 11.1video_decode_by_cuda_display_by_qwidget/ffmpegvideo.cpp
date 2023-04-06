@@ -13,6 +13,8 @@
 
 #include <omp.h>
 
+#define MAX_AUDIO_FRAME_SIZE 192000
+
 std::mutex g_mutex;
 
 #include <tuple>
@@ -61,6 +63,8 @@ void FFmpegVideo::ffmpeg_init_variables()
     nv12Frame = av_frame_alloc();
 
     sendFrame = av_frame_alloc();
+
+    audioFrame = av_frame_alloc();
 
     initFlag = true;
 }
@@ -296,6 +300,57 @@ int FFmpegVideo::open_input_file()
         qDebug() << "Fill arrays failed.";
         return -1;
     }
+
+    //Init audio
+    AVCodecParameters* aCodecPara = fmtCtx->streams[audioStreamIndex]->codecpar;
+    const AVCodec* codec = avcodec_find_decoder(aCodecPara->codec_id);
+    if (!codec) {
+        qDebug("Cannot find any codec for audio.");
+        return -1;
+    }
+    audioCodecCtx = avcodec_alloc_context3(codec);
+    if (avcodec_parameters_to_context(audioCodecCtx, aCodecPara) < 0) {
+        qDebug("Cannot alloc codec context.");
+        return -1;
+    }
+    audioCodecCtx->pkt_timebase = fmtCtx->streams[audioStreamIndex]->time_base;
+
+    if (avcodec_open2(audioCodecCtx, codec, NULL) < 0) {
+        qDebug("Cannot open audio codec.");
+        return -1;
+    }
+
+    audioFmt.setSampleRate(audioCodecCtx->sample_rate);
+    audioFmt.setChannelCount(audioCodecCtx->channels);
+    audioFmt.setSampleSize(16);
+    audioFmt.setSampleType(QAudioFormat::SignedInt); QAudioFormat::SignedInt; //Float
+
+    QAudioDeviceInfo info = QAudioDeviceInfo::defaultOutputDevice();
+    if(!info.isFormatSupported(audioFmt)){
+        audioFmt = info.nearestFormat(audioFmt);
+    }
+    audioOutput = new QAudioOutput(audioFmt);
+    audioOutput->setVolume(1.0);
+
+    streamOut = audioOutput->start();
+
+    //设置转码参数
+    uint64_t out_channel_layout = audioCodecCtx->channel_layout;
+    out_sample_rate = audioCodecCtx->sample_rate;
+    out_channels = av_get_channel_layout_nb_channels(out_channel_layout);
+    //printf("out rate : %d , out_channel is: %d\n",out_sample_rate,out_channels);
+
+    audio_out_buffer = (uint8_t*)av_malloc(MAX_AUDIO_FRAME_SIZE*2);
+
+    swr_ctx = swr_alloc_set_opts(NULL,
+                                             out_channel_layout,
+                                             out_sample_fmt,
+                                             out_sample_rate,
+                                             audioCodecCtx->channel_layout,
+                                             audioCodecCtx->sample_fmt,
+                                             audioCodecCtx->sample_rate,
+                                             0,NULL);
+    int ret = swr_init(swr_ctx);
 
     openFlag = true;
     return true;
@@ -738,6 +793,7 @@ void FFmpegVideo::run()
         else if (pkt->stream_index == audioStreamIndex)
         {
             // qDebug()<<"audioStream";
+            procAudio(pkt);
         }
         else
         {
@@ -761,6 +817,45 @@ void FFmpegVideo::run()
     av_freep(&out_buffer);
 
     qDebug() << "Thread stop now " << __FUNCTION__;
+}
+
+void FFmpegVideo::procAudio(AVPacket  *pkt){
+    if(avcodec_send_packet(audioCodecCtx,pkt)>=0){
+        while(avcodec_receive_frame(audioCodecCtx,audioFrame)>=0){
+            if(av_sample_fmt_is_planar(audioCodecCtx->sample_fmt)){
+                int len = swr_convert(swr_ctx,
+                                      &audio_out_buffer,
+                                      MAX_AUDIO_FRAME_SIZE*2,
+                                      (const uint8_t**)audioFrame->data,
+                                      audioFrame->nb_samples);
+                if(len<=0){
+                    continue;
+                }
+                //qDebug("convert length is: %d.\n",len);
+
+                int out_size = av_samples_get_buffer_size(0,
+                                                             out_channels,
+                                                             len,
+                                                             out_sample_fmt,
+                                                             1);
+                if(out_size<0){
+                    qDebug("buffer size is: %d.",out_size);
+                    return;
+                }
+
+                int sleep_time=(out_sample_rate*16*2/8)/out_size;
+
+                if(audioOutput->bytesFree()<out_size){
+                    //QTest::qSleep(sleep_time);
+                    streamOut->write((char*)audio_out_buffer,out_size);
+                }else {
+                    streamOut->write((char*)audio_out_buffer,out_size);
+                }
+                //将数据写入PCM文件
+                //fwrite(audio_out_buffer,1,dst_bufsize,file);
+            }
+        }
+    }
 }
 
 static int ConvertP010toNV12(AVFrame* p010Frame,AVFrame* nv12Frame){

@@ -29,6 +29,8 @@ private slots:
 
     void on_drawHWType_currentIndexChanged(int index);
 
+    void on_volumeValue_valueChanged(int value);
+
 private:
     Ui::MainWindow *ui;
     QLabel *titleLabel=0;

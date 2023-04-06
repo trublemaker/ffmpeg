@@ -8,6 +8,10 @@
 #include <QPainter>
 #include <QDebug>
 
+#include <QAudioFormat>
+#include <QAudioOutput>
+#include <QTest>
+
 #include <string>
 #include <SDL.h>
 
@@ -29,6 +33,15 @@ extern "C"{
 #include <libavformat/avformat.h>
 #include <libavutil/time.h>
 #include <libavcodec/packet.h>
+
+#include "libavfilter/avfilter.h"
+#include "libavformat/avformat.h"
+#include "libavutil/avutil.h"
+#include "libavutil/ffversion.h"
+#include "libswresample/swresample.h"
+#include "libswscale/swscale.h"
+#include "libpostproc/postprocess.h"
+#include <libavutil/samplefmt.h>
 }
 
 using namespace std;
@@ -64,6 +77,7 @@ public:
 
     int hw_decoder_init(AVCodecContext *ctx, const AVHWDeviceType type);
 
+    void procAudio(AVPacket  *pkt);
 protected:
     void run();
 
@@ -74,12 +88,28 @@ private:
     AVFormatContext *fmtCtx       =NULL;
     const AVCodec   *videoCodec   =NULL;
     const AVCodec   *audioCodec   = nullptr;
+
     AVCodecContext  *videoCodecCtx=NULL;
+    AVCodecContext  *audioCodecCtx=NULL;
+
     AVPacket        *pkt          = NULL;
     AVFrame         *yuvFrame     = NULL;
     AVFrame         *rgbFrame     = NULL;
     AVFrame         *nv12Frame    = NULL;
+
+    AVFrame         *audioFrame  = nullptr;
     AVStream        *videoStream  = NULL;
+
+    SwrContext *swr_ctx ;//audio swr
+
+    QAudioOutput *audioOutput;
+    QIODevice *streamOut;
+    QAudioFormat audioFmt;
+
+    uint8_t *audio_out_buffer = nullptr;
+    int out_sample_rate = 0 ;
+    int out_channels = 0;
+    AVSampleFormat out_sample_fmt =  AV_SAMPLE_FMT_S16;//AV_SAMPLE_FMT_FLTP;//AV_SAMPLE_FMT_S16;
 
     int videowidth=0,videoheight=0;
 

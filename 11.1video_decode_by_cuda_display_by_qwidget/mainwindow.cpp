@@ -101,3 +101,8 @@ void MainWindow::on_drawHWType_currentIndexChanged(int index)
     ui->widget->setOutputAccelsType(index);
 }
 
+
+void MainWindow::on_volumeValue_valueChanged(int value)
+{
+
+}
