@@ -486,7 +486,7 @@ void FFmpegVideo::run()
                                     src_frame = nv12Frame;
                                 }
                                 dst_frame->format = src_frame->format;
-                                dst_frame->width = src_frame->width;
+                                dst_frame->width  = src_frame->width;
                                 dst_frame->height = src_frame->height;
                                 dst_frame->channels = src_frame->channels;
                                 dst_frame->channel_layout = src_frame->channel_layout;
@@ -498,7 +498,10 @@ void FFmpegVideo::run()
                                 av_frame_copy_props(dst_frame, src_frame);
 
                                 if (debugstep) fprintf(stderr, " %2d %s \n", 84, QDateTime::currentDateTime().toString("ss.zzz").toStdString().c_str());
-                                fflush(stderr);
+                                if (debugstep) fflush(stderr);
+
+                                dst_frame->pts    = yuvFrame->pts;
+                                dst_frame->pkt_dts= yuvFrame->pkt_dts;
 
                                 g_mutex.lock();
                                 frameTupleList.push_back(make_tuple(yuvFrame->pts, dst_frame));
@@ -760,33 +763,6 @@ void FFmpegVideo::run()
     qDebug() << "Thread stop now " << __FUNCTION__;
 }
 
-static int ConvertP010toNV21(AVFrame* pFrame){
-    int width,height;
-
-    width = pFrame->width;
-    height = pFrame->height;
-
-    for (int i = 0; i < height; ++i) {
-        uint16_t *pu16YData = (uint16_t *)(pFrame->data[0] + pFrame->width * 2 * i);//每一行的起始位置
-        uint8_t  *pu8YData = pFrame->data[0] + pFrame->width * i;
-        for (int j = 0; j < width; j++, pu8YData++, pu16YData++) {
-            *pu8YData = (uint8_t)(*pu16YData >> 8);   //Y 分量向右移位（移 8 位）
-        }
-    }
-
-    width /= 2; height /= 2;
-    for (int i = 0; i < height; ++i) {
-        uint16_t *pu16UVData = (uint16_t *)(pFrame->data[1] + pFrame->width * 2 * i);//每一行的起始位置
-        uint8_t  *pu8UVData = pFrame->data[1] + pFrame->width * i;
-        for (int j = 0; j < width; ++j, pu8UVData+=2, pu16UVData+=2) {
-            *pu8UVData = *pu16UVData >> 8;             //V 分量向右移位（移 8 位）
-            *(pu8UVData + 1) = *(pu16UVData + 1) >> 8; //U 分量向右移位（移 8 位）
-        }
-    }
-
-    return 0;
-}
-
 static int ConvertP010toNV12(AVFrame* p010Frame,AVFrame* nv12Frame){
     uint8_t* p010_src[2];
     p010_src[0] = p010Frame->data[0];
@@ -811,30 +787,33 @@ static int ConvertP010toNV12(AVFrame* p010Frame,AVFrame* nv12Frame){
     //       numBytesd, nv12Frame->width, nv12Frame->height,nv12Frame->width*nv12Frame->height,
     //       nv12Frame->data[1]-nv12Frame->data[0]);
 
-    if(1){
+    if (0)
+    {
 #pragma omp parallel for
-        for (int i = 0; i < numBytesd; i++) {
-            *(nv12_dst[0]++) = p010_src[0][i*2+1];
+        for (int i = 0; i < numBytesd; i++)
+        {
+            *(nv12_dst[0]++) = p010_src[0][i * 2 + 1];
         }
-        if(1) return 0;
+        if (1)  return 0;
     }
 
 //#pragma omp parallel sections
     {
-    //Y
+        // Y
 //#pragma omp section
-    #pragma omp parallel for
-    for (int i = 0; i < p010Frame->width * p010Frame->height; i++) {
-        *(nv12_dst[0]++) = *((uint8_t*)p010_src[0] + i*2+1);
-    }
+#pragma omp parallel for
+        for (int i = 0; i < p010Frame->width * p010Frame->height; i++)
+        {
+            *(nv12_dst[0]++) = *((uint8_t *)p010_src[0] + i * 2 + 1);
+        }
 
-    //UV
+        // UV
 //#pragma omp section
-    #pragma omp parallel for
-    for (int i = 0; i < p010Frame->width * p010Frame->height / 2; i++) {
-        *(nv12_dst[1]++) = *((uint8_t*)p010_src[1] + i*2+1);
-    }
-
+#pragma omp parallel for
+        for (int i = 0; i < p010Frame->width * p010Frame->height / 2; i++)
+        {
+            *(nv12_dst[1]++) = *((uint8_t *)p010_src[1] + i * 2 + 1);
+        }
     }
     return 0;
 }
@@ -914,6 +893,7 @@ void PlayVideo::run()
     ::Sleep(0);
 
     int64_t pts_pre = 0;
+    int64_t pts_start = 0;
     bool disp = 0;
     int sleeptime = 10;
 
@@ -999,7 +979,9 @@ void PlayVideo::run()
                         pixformat =SDL_PIXELFORMAT_NV12;
 
                     QString formatStr = av_get_pix_fmt_name((AVPixelFormat)(sendFrame1->format));
-                    qDebug() << "Format:" <<  formatStr.toUpper();
+
+                    pts_start = sendFrame1->pts;
+                    qDebug() << "Format:" <<  formatStr.toUpper()<<" PTS:"<<pts_start;
 
                     switch (sendFrame1->format) {
                     case AV_PIX_FMT_YUV420P:
@@ -1134,7 +1116,6 @@ void PlayVideo::run()
             SDL_PollEvent(&SDLevent);
 
             //av_free(buf);
-            pts_pre = pts;
 
             QueryPerformanceCounter(&li);
             if (CounterStart == 0)
@@ -1157,8 +1138,8 @@ void PlayVideo::run()
             frameTupleList.pop_front();
             g_mutex.unlock();
 
-            av_frame_unref(sendFrame1);
-            av_frame_free(&sendFrame1);
+            if(pts_start==0 && sendFrame1->pts>0) pts_start=sendFrame1->pts;
+            pts_pre = sendFrame1->pts-pts_start;
 
             ::Sleep(sleepms);
             //::WaitForSingleObject()
@@ -1172,16 +1153,21 @@ void PlayVideo::run()
                        QDateTime::currentDateTime().toString("*hh:mm:ss.zzz*").toStdString().c_str(),
                        sleepms, count, totaltimes, deltatime);
             }
-#define LOGCOUNT (25 * 10)
+#define LOGCOUNT (25 * 1)
             if (0 ||
                 (count % LOGCOUNT == 0))
             {
-                qDebug("\033[38m%s Render sleep %2dms %4d PlayTime:%3d:%02d:%02d.%03d (%5d.%03ds) deltaTime:%2d",
+                qDebug("\033[38m%s Render sleep %2dms %4d PlayTime:%3d:%02d:%02d.%03d (%5d.%03ds) deltaTime:%2d pts:%d",
                        QDateTime::currentDateTime().toString("hh:mm:ss.zzz").toStdString().c_str(),
                        sleepms, count,
                        totaltimes / 60 / 60 / 1000, totaltimes / 60 / 1000 % 60, totaltimes / 1000 % 60, totaltimes % 1000, totaltimes / 1000, totaltimes % 1000,
-                       deltatime);
+                       deltatime,pts_pre/3600
+                       );
             }
+
+            av_frame_unref(sendFrame1);
+            av_frame_free(&sendFrame1);
+
             count++;
         }
         else if (Images.size() > 0)
