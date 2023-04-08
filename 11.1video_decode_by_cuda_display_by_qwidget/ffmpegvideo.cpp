@@ -23,6 +23,10 @@ using std::tuple;
 list<IMG> Images;
 
 list<tuple<int64_t /*pts*/, AVFrame * /*buffer*/>> frameTupleList;
+list<tuple<int64_t /*pts*/, uint8_t * /*buffer*/>> audioTupleList;
+
+void procAudioThread();
+QThread *audioThread = nullptr;
 
 int useSDL = 1;
 
@@ -380,6 +384,48 @@ void FFmpegVideo::run()
     if (!openFlag)
     {
         open_input_file();
+    }
+
+    if (!audioThread)
+    {
+        audioThread = QThread::create(
+            std::function<void()>([this](){
+            //std::list<tuple<int64_t /*pts*/, uint8_t * /*buffer*/>> audioTupleList;
+            uint8_t * buffer=nullptr;
+            MMRESULT rx = timeBeginPeriod(1);
+            ::Sleep(0);
+            if(rx != TIMERR_NOERROR){
+                qDebug() << QDateTime::currentDateTime().toString("ss.zzz") << "timeBeginPeriod" << rx;
+                exit(0);
+            }
+
+            while (!stopFlag)
+            {
+                if ( audioTupleList.size() > 0 )
+                {
+                    int out_size = get<0>(audioTupleList.front());
+                    buffer = get<1>(audioTupleList.front());
+
+                    audioTupleList.pop_front();
+
+                    int sleep_time=(out_sample_rate*16*2/8)/out_size;
+                    if(audioOutput->bytesFree()<out_size){
+                        //QTest::qSleep(sleep_time);
+                        QThread::msleep(sleep_time);
+                        streamOut->write((char*)buffer,out_size);
+                        //qDebug() << QDateTime::currentDateTime().toString("ss.zzz") << sleep_time;
+                    }else {
+                        streamOut->write((char*)buffer,out_size);
+                        //qDebug() << QDateTime::currentDateTime().toString("ss.zzz") << 0;
+                    }
+                    av_free(buffer);
+                }else{
+                    QThread::msleep(10);
+                }
+            }
+            timeEndPeriod(1);
+        }));
+        audioThread->start();
     }
 
     while (av_read_frame(fmtCtx, pkt) >= 0)
@@ -793,6 +839,8 @@ void FFmpegVideo::run()
         else if (pkt->stream_index == audioStreamIndex)
         {
             // qDebug()<<"audioStream";
+            //create thread use QThread
+
             procAudio(pkt);
         }
         else
@@ -845,12 +893,19 @@ void FFmpegVideo::procAudio(AVPacket  *pkt){
 
                 int sleep_time=(out_sample_rate*16*2/8)/out_size;
 
+                uint8_t * buff =(uint8_t*)av_malloc(out_size+1);
+
+                memcpy(buff,audio_out_buffer,out_size);
+                audioTupleList.push_back(std::make_tuple(out_size,buff)); //pkt->pts
+
+                /*
                 if(audioOutput->bytesFree()<out_size){
                     //QTest::qSleep(sleep_time);
                     streamOut->write((char*)audio_out_buffer,out_size);
                 }else {
                     streamOut->write((char*)audio_out_buffer,out_size);
                 }
+                */
                 //将数据写入PCM文件
                 //fwrite(audio_out_buffer,1,dst_bufsize,file);
             }
